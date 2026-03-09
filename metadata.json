@@ -1,0 +1,5 @@
+{
+  "name": "Local Preference Dataset Viewer",
+  "description": "A lightweight web interface for local preference dataset viewing, supporting dynamic model comparison columns, schema summary, and pagination.",
+  "requestFramePermissions": []
+}

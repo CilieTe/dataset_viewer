@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Local Preference Dataset Viewer</title>
+  <script crossorigin src="https://cdn.jsdelivr.net/npm/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7/babel.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .line-clamp-3 { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+    .line-clamp-4 { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+  </style>
+</head>
+<body class="bg-neutral-50 text-neutral-900 font-sans">
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    // Control Bar Component
+    function ControlBar({ datasets, models, metricSources, selectedDataset, setSelectedDataset, selectedSource, setSelectedSource, modelA, setModelA, modelB, setModelB }) {
+      return (
+        <div className="bg-white p-4 rounded-xl border border-neutral-200 shadow-sm mb-4">
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium text-neutral-500">Dataset:</label>
+              <select
+                value={selectedDataset}
+                onChange={e => setSelectedDataset(e.target.value)}
+                className="px-3 py-1.5 rounded border border-neutral-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              >
+                <option value="all">All Datasets</option>
+                {datasets.map(d => (
+                  <option key={d.name} value={d.name}>{d.name} ({d.rowCount})</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium text-neutral-500">Metric Source:</label>
+              <select
+                value={selectedSource}
+                onChange={e => setSelectedSource(e.target.value)}
+                className="px-3 py-1.5 rounded border border-neutral-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              >
+                {metricSources.map(s => (
+                  <option key={s.key} value={s.key}>{s.name}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <label className="text-sm font-medium text-neutral-500">Compare:</label>
+              <select
+                value={modelA}
+                onChange={e => setModelA(e.target.value)}
+                className="px-3 py-1.5 rounded border border-neutral-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              >
+                <option value="">Select Model A</option>
+                {models.map(m => (
+                  <option key={m.suffix} value={m.name}>{m.name}</option>
+                ))}
+              </select>
+              <span className="text-neutral-400">vs</span>
+              <select
+                value={modelB}
+                onChange={e => setModelB(e.target.value)}
+                className="px-3 py-1.5 rounded border border-neutral-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              >
+                <option value="">Select Model B</option>
+                {models.map(m => (
+                  <option key={m.suffix} value={m.name}>{m.name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Comparison Card Component
+    function ComparisonCard({ comparison }) {
+      if (!comparison) return (
+        <div className="bg-white p-5 rounded-xl border border-neutral-200 shadow-sm">
+          <h3 className="text-sm font-medium uppercase tracking-wider text-neutral-500 mb-4">Head-to-Head Comparison</h3>
+          <p className="text-sm text-neutral-400">Select two models to compare</p>
+        </div>
+      );
+      
+      if (comparison.error) return (
+        <div className="bg-white p-5 rounded-xl border border-neutral-200 shadow-sm">
+          <h3 className="text-sm font-medium uppercase tracking-wider text-neutral-500 mb-4">Head-to-Head Comparison</h3>
+          <p className="text-sm text-red-500">{comparison.error}</p>
+        </div>
+      );
+
+      const { modelA, modelB, totalSamples, winRateA, winRateB, tieRate, passRateA, passRateB, avgScoreA, avgScoreB } = comparison;
+      
+      return (
+        <div className="bg-white p-5 rounded-xl border border-neutral-200 shadow-sm">
+          <h3 className="text-sm font-medium uppercase tracking-wider text-neutral-500 mb-2">Head-to-Head Comparison</h3>
+          <p className="text-xs text-neutral-400 mb-4">{totalSamples} common samples</p>
+          
+          {/* Win Rate */}
+          <div className="mb-4">
+            <div className="text-xs text-neutral-500 mb-2">Win Rate (METEOR)</div>
+            <div className="flex h-4 rounded-full overflow-hidden">
+              <div className="bg-indigo-500" style={{width: `${winRateA * 100}%`}} title={`${modelA.name}: ${(winRateA*100).toFixed(1)}%`} />
+              <div className="bg-slate-300" style={{width: `${tieRate * 100}%`}} title={`Tie: ${(tieRate*100).toFixed(1)}%`} />
+              <div className="bg-amber-500" style={{width: `${winRateB * 100}%`}} title={`${modelB.name}: ${(winRateB*100).toFixed(1)}%`} />
+            </div>
+            <div className="flex justify-between text-xs mt-1">
+              <span className="text-indigo-600">{modelA.name}: {(winRateA*100).toFixed(1)}%</span>
+              <span className="text-slate-500">Tie: {(tieRate*100).toFixed(1)}%</span>
+              <span className="text-amber-600">{modelB.name}: {(winRateB*100).toFixed(1)}%</span>
+            </div>
+          </div>
+
+          {/* Accuracy Comparison */}
+          <div className="mb-4">
+            <div className="text-xs text-neutral-500 mb-2">Accuracy (Pass Rate)</div>
+            <div className="space-y-2">
+              <div>
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="truncate max-w-[150px]" title={modelA.name}>{modelA.name}</span>
+                  <span className="font-mono">{(passRateA*100).toFixed(1)}%</span>
+                </div>
+                <div className="h-2 bg-neutral-100 rounded-full overflow-hidden">
+                  <div className="h-full rounded-full bg-emerald-500" style={{width: `${passRateA*100}%`}} />
+                </div>
+              </div>
+              <div>
+                <div className="flex justify-between text-xs mb-1">
+                  <span className="truncate max-w-[150px]" title={modelB.name}>{modelB.name}</span>
+                  <span className="font-mono">{(passRateB*100).toFixed(1)}%</span>
+                </div>
+                <div className="h-2 bg-neutral-100 rounded-full overflow-hidden">
+                  <div className="h-full rounded-full bg-emerald-500" style={{width: `${passRateB*100}%`}} />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Average Score */}
+          <div>
+            <div className="text-xs text-neutral-500 mb-2">Average METEOR Score</div>
+            <div className="flex justify-between text-sm">
+              <div>
+                <span className="text-neutral-600">{modelA.name}:</span>
+                <span className="font-mono ml-2 font-medium">{avgScoreA.toFixed(3)}</span>
+              </div>
+              <div>
+                <span className="text-neutral-600">{modelB.name}:</span>
+                <span className="font-mono ml-2 font-medium">{avgScoreB.toFixed(3)}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Summary Cards Component
+    function SummaryCards({ summary, selectedSource }) {
+      if (!summary) return (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {[1,2,3].map(i => <div key={i} className="h-32 bg-neutral-100 animate-pulse rounded-xl" />)}
+        </div>
+      );
+
+      // Format source name for display
+      const sourceDisplay = selectedSource === 'meteor' ? 'METEOR' : 
+                           selectedSource === 'deepseek-v3.2-guide' ? 'Guide Review' :
+                           selectedSource.charAt(0).toUpperCase() + selectedSource.slice(1);
+
+      const sortedByPass = [...summary.models].sort((a, b) => b.passRate - a.passRate);
+      const sortedByWin = [...summary.models].sort((a, b) => b.winRate - a.winRate);
+      const sortedByScore = [...summary.models].sort((a, b) => b.avgScore - a.avgScore);
+      const maxScore = Math.max(...summary.models.map(m => m.avgScore), 0.001);
+      
+      return (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Accuracy (Pass Rate) */}
+          <div className="bg-white p-5 rounded-xl border border-neutral-200 shadow-sm">
+            <h3 className="text-sm font-medium uppercase tracking-wider text-neutral-500 mb-4">Accuracy (Pass)</h3>
+            <div className="space-y-3 max-h-[250px] overflow-auto">
+              {sortedByPass.map(m => (
+                <div key={m.suffix}>
+                  <div className="flex justify-between text-xs mb-1">
+                    <span className="truncate max-w-[180px]" title={m.name}>{m.name}</span>
+                    <span className="font-mono">{(m.passRate*100).toFixed(1)}%</span>
+                  </div>
+                  <div className="h-2 bg-neutral-100 rounded-full overflow-hidden">
+                    <div className={`h-full rounded-full ${m.passRate>=0.8?'bg-emerald-500':m.passRate>=0.5?'bg-amber-500':'bg-red-500'}`} style={{width:`${m.passRate*100}%`}} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Win Rate (Best Score) - Dynamic based on source */}
+          <div className="bg-white p-5 rounded-xl border border-neutral-200 shadow-sm">
+            <h3 className="text-sm font-medium uppercase tracking-wider text-neutral-500 mb-4">Win Rate (Best {sourceDisplay})</h3>
+            <div className="space-y-3 max-h-[250px] overflow-auto">
+              {sortedByWin.map(m => (
+                <div key={m.suffix}>
+                  <div className="flex justify-between text-xs mb-1">
+                    <span className="truncate max-w-[180px]" title={m.name}>{m.name}</span>
+                    <span className="font-mono">{(m.winRate*100).toFixed(1)}%</span>
+                  </div>
+                  <div className="h-2 bg-neutral-100 rounded-full overflow-hidden">
+                    <div className="h-full rounded-full bg-indigo-500" style={{width:`${m.winRate*100}%`}} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Score Comparison - Dynamic based on source */}
+          <div className="bg-white p-5 rounded-xl border border-neutral-200 shadow-sm">
+            <h3 className="text-sm font-medium uppercase tracking-wider text-neutral-500 mb-4">{sourceDisplay} Score</h3>
+            <div className="space-y-3 max-h-[250px] overflow-auto">
+              {sortedByScore.map(m => (
+                <div key={m.suffix}>
+                  <div className="flex justify-between text-xs mb-1">
+                    <span className="truncate max-w-[180px]" title={m.name}>{m.name}</span>
+                    <span className="font-mono">{m.avgScore.toFixed(3)}</span>
+                  </div>
+                  <div className="h-2 bg-neutral-100 rounded-full overflow-hidden">
+                    <div className="h-full rounded-full bg-blue-500" style={{width:`${(m.avgScore/maxScore)*100}%`}} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Data Table Component
+    function DataTable({ data, models, onRowClick }) {
+      if (!data?.length) return <div className="p-8 text-center text-neutral-500">No data</div>;
+
+      const getContext = (conv) => {
+        if (!conv?.length) return 'No context';
+        for (let i = conv.length-1; i>=0; i--) if (conv[i].role==='user') return conv[i].content;
+        return conv[conv.length-1]?.content;
+      };
+
+      return (
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse table-fixed">
+            <thead>
+              <tr className="bg-neutral-50/80 border-b border-neutral-200 text-xs uppercase text-neutral-500">
+                <th className="p-4 w-56">Metadata</th>
+                <th className="p-4 w-[300px]">Context</th>
+                {models.map(m => <th key={m.suffix} className="p-4 w-[400px]"><div className="truncate">{m.name}</div></th>)}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-neutral-100">
+              {data.map(row => (
+                <tr key={row.id} className="hover:bg-neutral-50 cursor-pointer" onClick={()=>onRowClick(row)}>
+                  <td className="p-4 align-top">
+                    <div className="font-mono text-xs truncate">{row.id}</div>
+                    <div className="flex gap-1 mt-2 flex-wrap">
+                      <span className="px-2 py-0.5 rounded text-[10px] bg-neutral-100 break-all">{row.dataset}</span>
+                      <span className="px-2 py-0.5 rounded text-[10px] bg-blue-50 text-blue-600 uppercase">{row.language}</span>
+                      <span className="px-2 py-0.5 rounded text-[10px] bg-indigo-50 text-indigo-600">Turn {row.turn}</span>
+                    </div>
+                    {row.conv_metadata?.tags?.map((t,i) => <span key={i} className="px-1.5 py-0.5 rounded text-[9px] bg-amber-50 text-amber-600 mt-1 inline-block">{t}</span>)}
+                  </td>
+                  <td className="p-4 align-top">
+                    <div className="bg-neutral-50 border border-neutral-200 rounded-lg p-3">
+                      <div className="text-xs text-neutral-500 mb-1">Last User Message</div>
+                      <div className="text-sm text-neutral-700 line-clamp-3">{getContext(row.full_conversation)}</div>
+                    </div>
+                  </td>
+                  {models.map(model => {
+                    const s = model.suffix;
+                    const isPass = row[`accuracy_${s}`] === 1;
+                    const score = row[`score_${s}`];
+                    const resp = row[`conversation_${s}`];
+                    return (
+                      <td key={s} className="p-4 align-top">
+                        <div className={`border rounded-lg p-3 h-full ${isPass?'bg-emerald-50/30 border-emerald-100':'bg-red-50/30 border-red-100'}`}>
+                          <div className="flex items-center justify-between mb-2">
+                            <span className={`text-xs font-medium ${isPass?'text-emerald-700':'text-red-700'}`}>{isPass?'✓ Pass':'✗ Fail'}</span>
+                            {score && <span className="text-xs font-mono bg-white px-1.5 rounded border">M:{score}</span>}
+                          </div>
+                          <div className="text-sm text-neutral-700 line-clamp-4">{resp || <em className="text-neutral-400">No response</em>}</div>
+                        </div>
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+    }
+
+    // Drawer Component
+    function ConversationDrawer({ row, onClose }) {
+      const [tab, setTab] = useState('conversation');
+      if (!row) return null;
+
+      const models = Object.keys(row).filter(k=>k.startsWith('model_')).map(k=>{
+        const s = k.substring(6);
+        return { suffix:s, name:row[k], response:row[`conversation_${s}`], isPass:row[`accuracy_${s}`]===1, score:row[`score_${s}`], matchAcc:row[`match_acc_${s}`] };
+      }).sort((a,b)=>(b.score||0)-(a.score||0));
+
+      useEffect(() => {
+        const esc = e => { if (e.key==='Escape') onClose(); };
+        window.addEventListener('keydown', esc);
+        return () => window.removeEventListener('keydown', esc);
+      }, [onClose]);
+
+      return (
+        <div className="fixed inset-0 z-50 flex justify-end">
+          <div className="absolute inset-0 bg-neutral-900/20" onClick={onClose} />
+          <div className="relative w-full max-w-3xl bg-white h-full shadow-2xl flex flex-col border-l animate-[slideIn_0.2s_ease-out]">
+            <style>{`@keyframes slideIn { from { transform: translateX(100%) } to { transform: translateX(0) } }`}</style>
+            <div className="flex justify-between items-center px-6 py-4 border-b bg-neutral-50">
+              <div>
+                <h2 className="text-lg font-semibold">Conversation Details</h2>
+                <div className="font-mono text-xs text-neutral-500 mt-1">{row.id}</div>
+                <div className="flex gap-2 mt-2 flex-wrap">
+                  <span className="px-2 py-0.5 rounded text-[10px] bg-neutral-100 break-all">{row.dataset}</span>
+                  <span className="px-2 py-0.5 rounded text-[10px] bg-blue-50 text-blue-600 uppercase">{row.language}</span>
+                  <span className="px-2 py-0.5 rounded text-[10px] bg-indigo-50 text-indigo-600">Turn {row.turn}</span>
+                </div>
+              </div>
+              <button onClick={onClose} className="p-2 rounded-full hover:bg-neutral-200">✕</button>
+            </div>
+            <div className="flex gap-6 px-6 border-b text-sm font-medium">
+              {['conversation','groundtruth','models','metadata'].map(t => (
+                <button key={t} onClick={()=>setTab(t)} className={`py-3 border-b-2 transition-colors ${tab===t?'border-indigo-500 text-indigo-600':'border-transparent text-neutral-500'}`}>
+                  {t==='groundtruth'?'Ground Truth':t.charAt(0).toUpperCase()+t.slice(1)}
+                </button>
+              ))}
+            </div>
+            <div className="flex-1 overflow-y-auto p-6 bg-neutral-50/30">
+              {tab==='conversation' && (
+                <div className="space-y-4">
+                  {row.full_conversation?.map((msg,idx) => (
+                    <div key={idx} className={`flex gap-3 ${msg.role==='user'?'flex-row-reverse':''}`}>
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-xs ${msg.role==='user'?'bg-indigo-100 text-indigo-600':msg.role==='system'?'bg-amber-100 text-amber-600':'bg-emerald-100 text-emerald-600'}`}>
+                        {msg.role==='user'?'U':msg.role==='system'?'S':'A'}
+                      </div>
+                      <div className={`max-w-[85%] rounded-2xl px-5 py-3 text-sm leading-relaxed ${msg.role==='user'?'bg-indigo-600 text-white':msg.role==='system'?'bg-amber-50 border border-amber-200':'bg-white border'}`}>
+                        {msg.content}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {tab==='groundtruth' && (
+                <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-6">
+                  <h3 className="font-semibold text-emerald-700 mb-4">✓ Ground Truth Response</h3>
+                  <div className="text-sm whitespace-pre-wrap bg-white p-4 rounded border border-emerald-100">{row.ground_truth || 'No ground truth'}</div>
+                </div>
+              )}
+              {tab==='models' && (
+                <div className="space-y-4">
+                  {models.map(m => (
+                    <div key={m.suffix} className={`border rounded-xl overflow-hidden ${m.isPass?'bg-emerald-50/50 border-emerald-100':'bg-red-50/50 border-red-100'}`}>
+                      <div className="px-4 py-3 border-b flex justify-between items-center">
+                        <div className="flex items-center gap-2">
+                          <span>{m.isPass?'✓':'✗'}</span>
+                          <span className="font-semibold">{m.name}</span>
+                        </div>
+                        <div className="flex gap-2 text-xs">
+                          {m.score && <span className="bg-white px-2 py-1 rounded border">METEOR: {m.score}</span>}
+                          <span className={`px-2 py-1 rounded ${m.isPass?'bg-emerald-100 text-emerald-700':'bg-red-100 text-red-700'}`}>{m.isPass?'Pass':'Fail'}</span>
+                        </div>
+                      </div>
+                      <div className="p-5 text-sm whitespace-pre-wrap">{m.response || 'No response'}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {tab==='metadata' && (
+                <pre className="text-xs bg-neutral-50 p-4 rounded border overflow-x-auto">{JSON.stringify(row,null,2)}</pre>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Main App
+    function App() {
+      const [summary, setSummary] = useState(null);
+      const [data, setData] = useState([]);
+      const [page, setPage] = useState(1);
+      const [totalPages, setTotalPages] = useState(1);
+      const [loading, setLoading] = useState(true);
+      const [selected, setSelected] = useState(null);
+      
+      // Control states
+      const [datasets, setDatasets] = useState([]);
+      const [models, setModels] = useState([]);
+      const [metricSources, setMetricSources] = useState([]);
+      const [selectedDataset, setSelectedDataset] = useState('all');
+      const [selectedSource, setSelectedSource] = useState('meteor');
+      const [modelA, setModelA] = useState('');
+      const [modelB, setModelB] = useState('');
+      const [comparison, setComparison] = useState(null);
+
+      // Load datasets and metric sources
+      useEffect(() => {
+        fetch('/api/datasets').then(r=>r.json()).then(setDatasets);
+        fetch('/api/metric-sources').then(r=>r.json()).then(setMetricSources);
+      }, []);
+
+      // Load summary and models when dataset or source changes
+      useEffect(() => {
+        fetch(`/api/schema-summary?dataset=${selectedDataset}&source=${selectedSource}`).then(r=>r.json()).then(setSummary);
+        fetch(`/api/models?dataset=${selectedDataset}`).then(r=>r.json()).then(setModels);
+        setPage(1);
+      }, [selectedDataset, selectedSource]);
+
+      // Load table data
+      useEffect(() => {
+        setLoading(true);
+        fetch(`/api/rows?page=${page}&page_size=20&dataset=${selectedDataset}`).then(r=>r.json()).then(j=>{
+          setData(j.data);
+          setTotalPages(j.totalPages);
+          setLoading(false);
+        });
+      }, [page, selectedDataset]);
+
+      // Load comparison when models or source selected
+      useEffect(() => {
+        if (modelA && modelB) {
+          fetch(`/api/compare?modelA=${encodeURIComponent(modelA)}&modelB=${encodeURIComponent(modelB)}&dataset=${selectedDataset}&source=${selectedSource}`)
+            .then(r=>r.json()).then(setComparison);
+        } else {
+          setComparison(null);
+        }
+      }, [modelA, modelB, selectedDataset, selectedSource]);
+
+      return (
+        <div className="min-h-screen">
+          <header className="bg-white border-b px-6 py-4 sticky top-0 z-10">
+            <div className="max-w-7xl mx-auto flex justify-between items-center">
+              <h1 className="text-xl font-semibold">Local Preference Dataset Viewer</h1>
+              <div className="text-sm text-neutral-500">{summary ? `${summary.totalRows.toLocaleString()} rows` : 'Loading...'}</div>
+            </div>
+          </header>
+          <main className="max-w-7xl mx-auto p-6 space-y-4">
+            {/* Control Bar */}
+            <ControlBar 
+              datasets={datasets}
+              models={models}
+              metricSources={metricSources}
+              selectedDataset={selectedDataset}
+              setSelectedDataset={setSelectedDataset}
+              selectedSource={selectedSource}
+              setSelectedSource={setSelectedSource}
+              modelA={modelA}
+              setModelA={setModelA}
+              modelB={modelB}
+              setModelB={setModelB}
+            />
+            
+            {/* Comparison Card */}
+            {(modelA && modelB) && <ComparisonCard comparison={comparison} />}
+            
+            {/* Summary Cards */}
+            <SummaryCards summary={summary} selectedSource={selectedSource} />
+            
+            {/* Data Table */}
+            <div className="bg-white border rounded-xl shadow-sm overflow-hidden">
+              <div className="p-4 border-b flex justify-between items-center bg-neutral-50/50">
+                <h2 className="font-medium">Dataset Rows</h2>
+                <div className="flex items-center gap-2 text-sm">
+                  <button onClick={()=>setPage(p=>Math.max(1,p-1))} disabled={page===1||loading} className="px-3 py-1.5 rounded border hover:bg-neutral-50 disabled:opacity-50">Previous</button>
+                  <span className="text-neutral-500">Page {page} of {totalPages}</span>
+                  <button onClick={()=>setPage(p=>Math.min(totalPages,p+1))} disabled={page===totalPages||loading} className="px-3 py-1.5 rounded border hover:bg-neutral-50 disabled:opacity-50">Next</button>
+                </div>
+              </div>
+              <div className="relative min-h-[400px]">
+                {loading && <div className="absolute inset-0 bg-white/80 flex items-center justify-center z-10"><div className="w-8 h-8 border-2 border-neutral-300 border-t-indigo-500 rounded-full animate-spin"/></div>}
+                <DataTable data={data} models={summary?.models||[]} onRowClick={setSelected} />
+              </div>
+            </div>
+          </main>
+          {selected && <ConversationDrawer row={selected} onClose={()=>setSelected(null)} />}
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+  <script>
+    window.onerror = function(msg, url, line) {
+      document.body.innerHTML = '<div style="padding:20px;font-family:sans-serif;"><h2>Error</h2><pre>' + msg + '<br>Line: ' + line + '</pre></div>';
+    };
+  </script>
+</body>
+</html>
