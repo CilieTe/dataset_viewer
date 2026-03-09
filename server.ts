@@ -474,7 +474,8 @@ app.get('/api/schema-summary', (req, res) => {
 
         // Get score from the selected source
         const metricValue = row[`metric_${sourceKey}_${suffix}`];
-        const score = typeof metricValue === 'number' ? metricValue : parseFloat(row[`score_${suffix}`] || '0');
+        // If source doesn't exist for this row, use 0 (not fallback to METEOR)
+        const score = typeof metricValue === 'number' ? metricValue : 0;
 
         if (score > 0) {
           modelStats[suffix].totalScore += score;

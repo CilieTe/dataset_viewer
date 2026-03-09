@@ -182,7 +182,7 @@
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {/* Accuracy (Pass Rate) */}
           <div className="bg-white p-5 rounded-xl border border-neutral-200 shadow-sm">
-            <h3 className="text-sm font-medium uppercase tracking-wider text-neutral-500 mb-4">Accuracy (Pass)</h3>
+            <h3 className="text-sm font-medium uppercase tracking-wider text-neutral-500 mb-4">ACCURACY (tool_acc)</h3>
             <div className="space-y-3 max-h-[250px] overflow-auto">
               {sortedByPass.map(m => (
                 <div key={m.suffix}>
@@ -277,15 +277,29 @@
                   </td>
                   {models.map(model => {
                     const s = model.suffix;
-                    const isPass = row[`accuracy_${s}`] === 1;
-                    const score = row[`score_${s}`];
                     const resp = row[`conversation_${s}`];
+                    // 获取 deepseek-v3.2-guide 分数
+                    const guideScore = row[`metric_deepseek-v3.2-guide_${s}`];
+                    const hasGuideScore = guideScore !== undefined && guideScore !== null;
+                    
+                    // 根据 guide 分数获取颜色 (低饱和度灰度色调，40/25)
+                    function getColorByGuideScore(score) {
+                      if (score === undefined || score === null) return 'bg-white border-neutral-200';
+                      if (score >= 4.5) return 'bg-teal-100/40 border-teal-200/25';      // 5分 - 极淡青绿
+                      if (score >= 3.5) return 'bg-emerald-100/40 border-emerald-200/25'; // 4分 - 极淡绿
+                      if (score >= 2.5) return 'bg-amber-100/40 border-amber-200/25';     // 3分 - 极淡琥珀
+                      if (score >= 1.5) return 'bg-orange-100/40 border-orange-200/25';   // 2分 - 极淡橙
+                      return 'bg-rose-100/40 border-rose-200/25';                          // 1分 - 极淡玫瑰
+                    }
+                    
+                    const colorClass = getColorByGuideScore(guideScore);
+                    
                     return (
-                      <td key={s} className="p-4 align-top">
-                        <div className={`border rounded-lg p-3 h-full ${isPass?'bg-emerald-50/30 border-emerald-100':'bg-red-50/30 border-red-100'}`}>
+                      <td key={s} className="p-4 align-top w-[400px]">
+                        <div className={`border rounded-lg p-3 h-full ${colorClass}`}>
                           <div className="flex items-center justify-between mb-2">
-                            <span className={`text-xs font-medium ${isPass?'text-emerald-700':'text-red-700'}`}>{isPass?'✓ Pass':'✗ Fail'}</span>
-                            {score && <span className="text-xs font-mono bg-white px-1.5 rounded border">M:{score}</span>}
+                            <span></span>
+                            {hasGuideScore && <span className="text-xs font-mono bg-white/80 px-1.5 rounded border border-black/5">{guideScore.toFixed(1)}</span>}
                           </div>
                           <div className="text-sm text-neutral-700 line-clamp-4">{resp || <em className="text-neutral-400">No response</em>}</div>
                         </div>
@@ -363,21 +377,98 @@
               )}
               {tab==='models' && (
                 <div className="space-y-4">
-                  {models.map(m => (
-                    <div key={m.suffix} className={`border rounded-xl overflow-hidden ${m.isPass?'bg-emerald-50/50 border-emerald-100':'bg-red-50/50 border-red-100'}`}>
-                      <div className="px-4 py-3 border-b flex justify-between items-center">
-                        <div className="flex items-center gap-2">
-                          <span>{m.isPass?'✓':'✗'}</span>
-                          <span className="font-semibold">{m.name}</span>
+                  {(() => {
+                    // Extract all available metric sources from this row
+                    const availableMetrics = [];
+                    const metricKeys = Object.keys(row).filter(k => k.startsWith('metric_'));
+                    const metricNames = new Set();
+                    metricKeys.forEach(key => {
+                      const parts = key.substring(7).split('_'); // Remove 'metric_' and split
+                      // Find where the model suffix starts (tricky because model names have underscores)
+                      // We'll extract metric name by matching against known patterns
+                      const possibleMetrics = ['meteor', 'tool_acc', 'call_halluc_acc', 'match_acc', 'ppl', 'deepseek-v3.2-guide'];
+                      for (const m of possibleMetrics) {
+                        if (key.includes(`metric_${m}_`)) {
+                          if (!metricNames.has(m)) {
+                            metricNames.add(m);
+                            availableMetrics.push({
+                              key: m,
+                              name: m === 'meteor' ? 'METEOR' :
+                                    m === 'tool_acc' ? 'Tool Acc' :
+                                    m === 'call_halluc_acc' ? 'Hallucination' :
+                                    m === 'match_acc' ? 'Match Acc' :
+                                    m === 'ppl' ? 'Perplexity' :
+                                    m === 'deepseek-v3.2-guide' ? 'Guide Review' : m,
+                              type: m.includes('acc') || m === 'tool_acc' ? 'accuracy' : 'score'
+                            });
+                          }
+                        }
+                      }
+                    });
+                    
+                    // Also add fallback metrics if no metrics found
+                    if (availableMetrics.length === 0) {
+                      availableMetrics.push(
+                        { key: 'meteor', name: 'METEOR', type: 'score' },
+                        { key: 'tool_acc', name: 'Tool Acc', type: 'accuracy' }
+                      );
+                    }
+                    
+                    return models.map(m => {
+                      const metrics = {};
+                      availableMetrics.forEach(metric => {
+                        const value = row[`metric_${metric.key}_${m.suffix}`];
+                        if (value !== undefined) {
+                          metrics[metric.key] = value;
+                        }
+                      });
+                      
+                      return (
+                        <div key={m.suffix} className="border rounded-xl overflow-hidden bg-white">
+                          <div className="px-4 py-3 border-b flex justify-between items-center bg-neutral-50">
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold">{m.name}</span>
+                            </div>
+                            <div className="flex gap-2 text-xs">
+                              {m.score && <span className="bg-white px-2 py-1 rounded border">METEOR: {m.score}</span>}
+                            </div>
+                          </div>
+                          <div className="p-5 text-sm whitespace-pre-wrap">{m.response || 'No response'}</div>
+                          
+                          {/* All Metrics Section - 显示所有数值指标 */}
+                          <div className="border-t bg-neutral-50/50 px-4 py-3">
+                            <h4 className="text-xs font-medium text-neutral-500 uppercase mb-3">All Metrics</h4>
+                            <div className="grid grid-cols-2 gap-3">
+                              {availableMetrics.map(metric => {
+                                const value = metrics[metric.key];
+                                const hasValue = value !== undefined && value !== null;
+                                
+                                if (metric.key === 'deepseek-v3.2-guide') {
+                                  // Guide review - 显示数值
+                                  return (
+                                    <div key={metric.key} className="flex justify-between items-center text-sm">
+                                      <span className="text-neutral-600">{metric.name}:</span>
+                                      <span className="font-mono font-medium">
+                                        {hasValue ? value.toFixed(1) : '-'}
+                                      </span>
+                                    </div>
+                                  );
+                                } else {
+                                  // 其他数值类型 (METEOR, PPL, tool_acc, call_halluc_acc 等)
+                                  return (
+                                    <div key={metric.key} className="flex justify-between items-center text-sm">
+                                      <span className="text-neutral-600">{metric.name}:</span>
+                                      <span className="font-mono">{hasValue ? value.toFixed(3) : '-'}</span>
+                                    </div>
+                                  );
+                                }
+                              })}
+                            </div>
+                          </div>
                         </div>
-                        <div className="flex gap-2 text-xs">
-                          {m.score && <span className="bg-white px-2 py-1 rounded border">METEOR: {m.score}</span>}
-                          <span className={`px-2 py-1 rounded ${m.isPass?'bg-emerald-100 text-emerald-700':'bg-red-100 text-red-700'}`}>{m.isPass?'Pass':'Fail'}</span>
-                        </div>
-                      </div>
-                      <div className="p-5 text-sm whitespace-pre-wrap">{m.response || 'No response'}</div>
-                    </div>
-                  ))}
+                      );
+                    });
+                  })()}
                 </div>
               )}
               {tab==='metadata' && (
@@ -419,6 +510,10 @@
         fetch(`/api/schema-summary?dataset=${selectedDataset}&source=${selectedSource}`).then(r=>r.json()).then(setSummary);
         fetch(`/api/models?dataset=${selectedDataset}`).then(r=>r.json()).then(setModels);
         setPage(1);
+        // 重置模型选择，因为之前的模型可能不在新数据集中
+        setModelA('');
+        setModelB('');
+        setComparison(null);
       }, [selectedDataset, selectedSource]);
 
       // Load table data
