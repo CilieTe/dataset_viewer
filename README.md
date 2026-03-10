@@ -7,11 +7,13 @@ A lightweight web interface for viewing and comparing LLM evaluation datasets wi
 ## Features
 
 - 📊 **Multi-Dataset Support** - Load and browse multiple JSONL evaluation datasets
+- 📤 **File Upload** - Upload JSONL files directly from the browser (drag & drop supported)
 - 🤖 **Model Comparison** - Side-by-side comparison of multiple model outputs
-- 📈 **Statistical Analysis** - Accuracy (Pass Rate), Win Rate, and METEOR Score rankings
+- 📈 **Statistical Analysis** - Accuracy (Pass/Error/Irrelevant), Win Rate, and Score rankings
 - 🎯 **Head-to-Head Comparison** - Compare two specific models across common samples
 - 💬 **Conversation View** - Full conversation context with system/user/assistant messages
 - 🏷️ **Tag Filtering** - View samples by error tags and categories
+- 📝 **Guide Reviews** - Display AI evaluator feedback (G0, G1, etc.) with Pass/Error/Irrelevant classification
 - 📱 **Responsive UI** - Clean, modern interface with Tailwind CSS
 - 🚀 **Static Export** - Generate standalone HTML files for sharing
 
