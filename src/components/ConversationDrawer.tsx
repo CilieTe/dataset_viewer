@@ -1,14 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import { X, User, Bot, CheckCircle2, XCircle, MessageSquare, Terminal } from 'lucide-react';
 import { clsx } from 'clsx';
-import { motion } from 'motion/react';
+import { motion } from 'framer-motion';
 
 interface ConversationDrawerProps {
   row: any;
   onClose: () => void;
+  isDark?: boolean;
 }
 
-export function ConversationDrawer({ row, onClose }: ConversationDrawerProps) {
+export function ConversationDrawer({ row, onClose, isDark = false }: ConversationDrawerProps) {
   const [activeTab, setActiveTab] = useState('context');
 
   // Handle escape key

@@ -1,8 +1,17 @@
-import express from 'express';
+import express, { Request } from 'express';
 import * as fs from 'fs';
 import * as path from 'path';
 import { fileURLToPath } from 'url';
 import multer from 'multer';
+
+// Extend Express Request to include multer file
+declare global {
+  namespace Express {
+    interface Request {
+      file?: multer.File;
+    }
+  }
+}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -26,7 +35,7 @@ const storage = multer.diskStorage({
   }
 });
 
-const upload = multer({ 
+const upload = multer({
   storage,
   fileFilter: (req, file, cb) => {
     if (file.originalname.endsWith('.jsonl')) {
@@ -100,18 +109,18 @@ const datasets: Record<string, DatasetInfo> = {};
 
 // Load a single dataset file
 function loadDatasetFile(filename: string, isUpload = false): { rows: ParsedRow[]; metricSources: MetricSource[] } {
-  const datasetPath = isUpload 
+  const datasetPath = isUpload
     ? path.join(UPLOAD_DIR, filename)
     : path.join(__dirname, 'dataset', filename);
-  
+
   if (!fs.existsSync(datasetPath)) {
     console.warn('Dataset file not found:', datasetPath);
     return { rows: [], metricSources: [] };
   }
-  
+
   const data: DatasetRow[] = [];
   const lines = fs.readFileSync(datasetPath, 'utf-8').trim().split('\n');
-  
+
   for (const line of lines) {
     if (line.trim()) {
       try {
@@ -121,7 +130,7 @@ function loadDatasetFile(filename: string, isUpload = false): { rows: ParsedRow[
       }
     }
   }
-  
+
   console.log(`Loaded ${data.length} rows from ${filename}`);
   return convertToRows(data, filename.replace('.jsonl', '').replace(/^upload_\d+_/, 'upload_'));
 }
@@ -143,7 +152,7 @@ function cleanupTemporaryDataset(name: string) {
 function convertToRows(data: DatasetRow[], datasetName: string): { rows: ParsedRow[]; metricSources: MetricSource[] } {
   const rows: ParsedRow[] = [];
   const discoveredSources = new Map<string, MetricSource>();
-  
+
   // Known metric patterns with their display names
   const knownMetrics: Record<string, { type: 'score' | 'accuracy'; displayName: string }> = {
     'meteor': { type: 'score', displayName: 'METEOR (Similarity)' },
@@ -152,7 +161,7 @@ function convertToRows(data: DatasetRow[], datasetName: string): { rows: ParsedR
     'match_acc': { type: 'accuracy', displayName: 'Match Accuracy' },
     'ppl': { type: 'score', displayName: 'Perplexity' }
   };
-  
+
   // Helper functions for parsing guide reviews
   function parseGuideResult(content: string): number {
     if (content.includes('result: yes')) return 1;      // pass
@@ -187,16 +196,16 @@ function convertToRows(data: DatasetRow[], datasetName: string): { rows: ParsedR
 
   for (const item of data) {
     // 放宽过滤条件：也支持只有 review 没有 evaluate 的数据
-    const evalTurns = item.dialog.filter(t => 
-      t.role === 'assistant' && 
+    const evalTurns = item.dialog.filter(t =>
+      t.role === 'assistant' &&
       (t.evaluate || (t.review?.review && t.review.review.length > 0))
     );
-    
+
     if (evalTurns.length === 0) continue;
-    
+
     for (const turn of evalTurns) {
       // 处理 guide reviews
-      const guideReviews = turn.review?.review?.filter(r => 
+      const guideReviews = turn.review?.review?.filter(r =>
         r.name.includes('guide') || r.name.includes('G0') || r.name.includes('G1')
       ) || [];
 
@@ -205,7 +214,8 @@ function convertToRows(data: DatasetRow[], datasetName: string): { rows: ParsedR
         name: r.name,
         result: parseGuideResult(r.content),
         analysis: extractAnalysis(r.content),
-        recommend: extractRecommend(r.content)
+        recommend: extractRecommend(r.content),
+        content: r.content
       }));
 
       const row: ParsedRow = {
@@ -223,9 +233,9 @@ function convertToRows(data: DatasetRow[], datasetName: string): { rows: ParsedR
           guideReviews: guideReviewsData
         })
       };
-      
+
       row['ground_truth'] = turn.content;
-      
+
       // 如果没有 evaluate 但有 review，创建"未知模型"
       if (!turn.evaluate && guideReviews.length > 0) {
         const suffix = 'unknown_model';
@@ -234,13 +244,13 @@ function convertToRows(data: DatasetRow[], datasetName: string): { rows: ParsedR
         const firstReview = guideReviews[0];
         const recommend = extractRecommend(firstReview.content);
         row[`conversation_${suffix}`] = recommend || '（无模型回复内容）';
-        
+
         // 为每个 guide 模型存储结果 (-1, 0, 1)
         for (const guide of guideReviews) {
           const guideKey = guide.name.replace(/[^a-zA-Z0-9]/g, '_');
           const result = parseGuideResult(guide.content);
           row[`metric_${guideKey}_${suffix}`] = result;
-          
+
           // 发现新的 metric source
           if (!discoveredSources.has(guideKey)) {
             discoveredSources.set(guideKey, {
@@ -251,13 +261,13 @@ function convertToRows(data: DatasetRow[], datasetName: string): { rows: ParsedR
           }
         }
       }
-      
+
       if (turn.evaluate) {
         for (const [modelName, output] of Object.entries(turn.evaluate)) {
           const suffix = modelName.replace(/[^a-zA-Z0-9]/g, '_');
           row[`model_${suffix}`] = modelName;
           row[`conversation_${suffix}`] = output.content;
-          
+
           // Process all metrics from this model output
           if (output.metrics) {
             for (const [metricKey, metricData] of Object.entries(output.metrics)) {
@@ -279,13 +289,13 @@ function convertToRows(data: DatasetRow[], datasetName: string): { rows: ParsedR
                   });
                 }
               }
-              
+
               // Store the metric value with a unique key
-              const value = typeof metricData === 'object' && metricData !== null 
-                ? (metricData as any).score 
+              const value = typeof metricData === 'object' && metricData !== null
+                ? (metricData as any).score
                 : metricData;
               row[`metric_${metricKey}_${suffix}`] = value;
-              
+
               // Also store backwards-compatible keys for meteor/tool_acc
               if (metricKey === 'meteor') {
                 row[`score_${suffix}`] = value?.toFixed?.(3) || '0';
@@ -298,11 +308,11 @@ function convertToRows(data: DatasetRow[], datasetName: string): { rows: ParsedR
           }
         }
       }
-      
+
       rows.push(row);
     }
   }
-  
+
   return { rows, metricSources: Array.from(discoveredSources.values()) };
 }
 
@@ -336,7 +346,7 @@ function getRows(datasetFilter: 'all' | string): ParsedRow[] {
 // Extract all unique models from rows
 function extractModels(rows: ParsedRow[]): Array<{suffix: string, name: string}> {
   const modelMap = new Map<string, string>();
-  
+
   for (const row of rows) {
     Object.keys(row).forEach(key => {
       if (key.startsWith('model_')) {
@@ -348,14 +358,14 @@ function extractModels(rows: ParsedRow[]): Array<{suffix: string, name: string}>
       }
     });
   }
-  
+
   return Array.from(modelMap.entries()).map(([suffix, name]) => ({ suffix, name }));
 }
 
 // Extract available metric sources from rows
 function extractMetricSources(rows: ParsedRow[]): MetricSource[] {
   const sources = new Map<string, MetricSource>();
-  
+
   // Known metric patterns
   const knownMetrics: Record<string, { type: 'score' | 'accuracy'; displayName: string }> = {
     'meteor': { type: 'score', displayName: 'METEOR' },
@@ -364,22 +374,22 @@ function extractMetricSources(rows: ParsedRow[]): MetricSource[] {
     'match_acc': { type: 'accuracy', displayName: 'Match Accuracy' },
     'ppl': { type: 'score', displayName: 'Perplexity' }
   };
-  
+
   for (const row of rows) {
     // Check the first model's metrics to discover sources
     const modelKey = Object.keys(row).find(k => k.startsWith('model_'));
     if (!modelKey) continue;
-    
+
     const suffix = modelKey.substring(6);
     const scoreKey = `score_${suffix}`;
-    
+
     // Check raw metrics from evaluate field (stored in row during conversion)
     // We need to look at the actual metric keys available
     Object.keys(row).forEach(key => {
       // Look for metric keys like "metric_meteor_modelName" or similar pattern
       // Actually, we stored metrics as score_, accuracy_ etc.
     });
-    
+
     // Alternative: scan through all row keys to find metric sources
     for (const key of Object.keys(row)) {
       if (key.startsWith('score_') || key.startsWith('accuracy_')) {
@@ -388,7 +398,7 @@ function extractMetricSources(rows: ParsedRow[]): MetricSource[] {
       }
     }
   }
-  
+
   // For now, detect based on row structure - check if non-standard metrics exist
   const sampleRow = rows.find(r => Object.keys(r).some(k => k.startsWith('model_')));
   if (sampleRow) {
@@ -399,17 +409,17 @@ function extractMetricSources(rows: ParsedRow[]): MetricSource[] {
       // Default sources
       sources.set('meteor', { name: 'METEOR (Auto)', key: 'meteor', type: 'score' });
       sources.set('tool_acc', { name: 'Tool Accuracy', key: 'tool_acc', type: 'accuracy' });
-      
+
       // Check for deepseek-v3.2-guide or similar guide metrics
       // We need to check the original evaluate data
       // Since we flattened it, we need to check if there are any special metric keys
-      
+
       // For guide-type metrics, they would have been in evaluate.metrics
       // and would have scores like "deepseek-v3.2-guide.score"
       // We need to track this during conversion
     }
   }
-  
+
   return Array.from(sources.values());
 }
 
@@ -417,7 +427,7 @@ function extractMetricSources(rows: ParsedRow[]): MetricSource[] {
 function compareModels(modelA: string, modelB: string, rows: ParsedRow[]) {
   const suffixA = modelA.replace(/[^a-zA-Z0-9]/g, '_');
   const suffixB = modelB.replace(/[^a-zA-Z0-9]/g, '_');
-  
+
   // Filter rows where both models participated AND at least one has a non-zero score
   const validRows = rows.filter(row => {
     const hasA = row[`model_${suffixA}`] !== undefined;
@@ -427,20 +437,20 @@ function compareModels(modelA: string, modelB: string, rows: ParsedRow[]) {
     const scoreB = parseFloat(row[`score_${suffixB}`] || '0');
     return scoreA > 0 || scoreB > 0; // At least one has a valid score
   });
-  
+
   if (validRows.length === 0) {
     return null;
   }
-  
+
   let aWins = 0, bWins = 0, ties = 0;
   let aPass = 0, bPass = 0;
   let aTotalScore = 0, bTotalScore = 0;
   let aScoredCount = 0, bScoredCount = 0;
-  
+
   for (const row of validRows) {
     const scoreA = parseFloat(row[`score_${suffixA}`] || '0');
     const scoreB = parseFloat(row[`score_${suffixB}`] || '0');
-    
+
     // Handle comparison: if tied, both get a "win" for win rate calculation
     // This means tied samples count toward both models' win rates
     if (scoreA > scoreB) {
@@ -451,17 +461,17 @@ function compareModels(modelA: string, modelB: string, rows: ParsedRow[]) {
       // Tie - both models performed equally well
       ties++;
     }
-    
+
     if (row[`accuracy_${suffixA}`] === 1) aPass++;
     if (row[`accuracy_${suffixB}`] === 1) bPass++;
-    
+
     // Only count score in average if it's non-zero
     if (scoreA > 0) { aTotalScore += scoreA; aScoredCount++; }
     if (scoreB > 0) { bTotalScore += scoreB; bScoredCount++; }
   }
-  
+
   const total = validRows.length;
-  
+
   return {
     totalSamples: total,
     modelA: { name: modelA, suffix: suffixA },
@@ -502,7 +512,7 @@ app.get('/api/models', (req, res) => {
 // Get metric sources for a dataset
 app.get('/api/metric-sources', (req, res) => {
   const datasetFilter = (req.query.dataset as string) || 'all';
-  
+
   if (datasetFilter === 'all') {
     // Aggregate sources from all datasets
     const allSources = new Map<string, MetricSource>();
@@ -523,21 +533,21 @@ app.get('/api/metric-sources', (req, res) => {
 // Compare two models
 app.get('/api/compare', (req, res) => {
   const { modelA, modelB, dataset } = req.query;
-  
+
   if (!modelA || !modelB) {
     return res.status(400).json({ error: 'modelA and modelB are required' });
   }
-  
+
   const datasetFilter = (dataset as string) || 'all';
   const rows = getRows(datasetFilter);
   const result = compareModels(modelA as string, modelB as string, rows);
-  
+
   if (!result) {
-    return res.json({ 
-      error: 'No common samples found for these models in the selected dataset' 
+    return res.json({
+      error: 'No common samples found for these models in the selected dataset'
     });
   }
-  
+
   res.json(result);
 });
 
@@ -640,6 +650,72 @@ app.get('/api/schema-summary', (req, res) => {
     };
   });
 
+  // Calculate metric ranges for all available sources
+  const metricRanges: Record<string, { min: number; max: number; type: 'score' | 'accuracy' }> = {};
+
+  // Define metric types
+  const metricTypes: Record<string, 'score' | 'accuracy'> = {
+    tool_acc: 'accuracy',
+    call_halluc_acc: 'score',
+    match_acc: 'score',
+    meteor: 'score',
+    ppl: 'score',
+  };
+
+  // Discover all metric sources from data
+  // Key format: metric_<source>_<model_suffix>
+  // Examples: metric_meteor_run27m3a1C0, metric_deepseek-v3.2-guide_model1
+  // Known source names to match against
+  const knownSources = ['meteor', 'ppl', 'tool_acc', 'call_halluc_acc', 'match_acc', 'deepseek-v3.2-guide', 'deepseek_r1_awq_G0', 'deepseek_r1_awq_G1'];
+  const allMetricSources = new Set<string>();
+
+  rows.forEach(row => {
+    Object.keys(row).forEach(key => {
+      if (key.startsWith('metric_')) {
+        // Remove 'metric_' prefix
+        const withoutPrefix = key.substring(7); // Remove 'metric_'
+
+        // Try to match known source names
+        let matchedSource = '';
+        for (const source of knownSources) {
+          if (withoutPrefix.startsWith(source + '_')) {
+            matchedSource = source;
+            break;
+          }
+        }
+
+        if (matchedSource) {
+          allMetricSources.add(matchedSource);
+        }
+      }
+    });
+  });
+
+  // Calculate ranges for each metric source
+  allMetricSources.forEach(sourceName => {
+    const values: number[] = [];
+    rows.forEach(row => {
+      Object.keys(row).forEach(key => {
+        // Match keys that start with metric_<sourceName>_
+        if (key.startsWith(`metric_${sourceName}_`)) {
+          const val = row[key];
+          if (typeof val === 'number' && !isNaN(val)) {
+            values.push(val);
+          }
+        }
+      });
+    });
+
+    if (values.length > 0) {
+      const min = Math.min(...values);
+      const max = Math.max(...values);
+      // Determine type from explicit definition
+      const type = metricTypes[sourceName] || 'score';
+
+      metricRanges[sourceName] = { min, max, type };
+    }
+  });
+
   res.json({
     totalRows,
     validScoredRows,
@@ -647,20 +723,82 @@ app.get('/api/schema-summary', (req, res) => {
     datasetDistribution: datasetCounts,
     languageDistribution: languageCounts,
     turnRange: { min: minTurn === Infinity ? 0 : minTurn, max: maxTurn },
-    models: modelsSummary
+    models: modelsSummary,
+    metricRanges  // Add metric ranges for dynamic UI
   });
 });
 
-// Get rows with pagination
+// Get rows with pagination and filters
 app.get('/api/rows', (req, res) => {
   const page = parseInt(req.query.page as string) || 1;
   const pageSize = parseInt(req.query.page_size as string) || 20;
   const datasetFilter = (req.query.dataset as string) || 'all';
-  
-  const rows = getRows(datasetFilter);
+  const modelsFilter = (req.query.models as string)?.split(',').filter(Boolean) || [];
+  const languagesFilter = (req.query.languages as string)?.split(',').filter(Boolean) || [];
+  const searchQuery = (req.query.search as string)?.toLowerCase().trim() || '';
+
+  // Debug logging
+  console.log(`[API /api/rows] page=${page}, pageSize=${pageSize}, dataset=${datasetFilter}, search="${searchQuery}"`);
+  console.log(`[API /api/rows] modelsFilter=[${modelsFilter.join(', ')}], languagesFilter=[${languagesFilter.join(', ')}]`);
+
+  let rows = getRows(datasetFilter);
+  console.log(`[API /api/rows] Total rows before filter: ${rows.length}`);
+
+  // Apply model filter
+  if (modelsFilter.length > 0) {
+    rows = rows.filter(row => {
+      return modelsFilter.some(suffix => row[`model_${suffix}`] !== undefined);
+    });
+  }
+
+  // Apply language filter
+  if (languagesFilter.length > 0) {
+    rows = rows.filter(row => languagesFilter.includes(row.language));
+  }
+
+  // Apply search filter
+  if (searchQuery) {
+    const beforeCount = rows.length;
+    rows = rows.filter(row => {
+      // Search in model names
+      const modelKeys = Object.keys(row).filter(k => k.startsWith('model_'));
+      for (const key of modelKeys) {
+        const modelName = String(row[key] || '').toLowerCase();
+        if (modelName.includes(searchQuery)) return true;
+      }
+      
+      // Search in conversation content (ground_truth and model responses)
+      const convKeys = Object.keys(row).filter(k => k.startsWith('conversation_'));
+      for (const key of convKeys) {
+        const content = String(row[key] || '').toLowerCase();
+        if (content.includes(searchQuery)) return true;
+      }
+      
+      // Search in ground truth
+      const groundTruth = String(row['ground_truth'] || '').toLowerCase();
+      if (groundTruth.includes(searchQuery)) return true;
+      
+      // Search in session_id and id
+      const sessionId = String(row['session_id'] || '').toLowerCase();
+      const rowId = String(row['id'] || '').toLowerCase();
+      if (sessionId.includes(searchQuery) || rowId.includes(searchQuery)) return true;
+
+      // Search in full_conversation (parsed JSON string)
+      try {
+        const fullConv = String(row['full_conversation'] || '').toLowerCase();
+        if (fullConv.includes(searchQuery)) return true;
+      } catch {
+        // Ignore parse errors
+      }
+      
+      return false;
+    });
+    console.log(`[API /api/rows] Search filter: ${beforeCount} -> ${rows.length} rows (query: "${searchQuery}")`);
+  }
+
   const start = (page - 1) * pageSize;
   const end = start + pageSize;
-  
+
   const paginatedData = rows.slice(start, end).map(row => {
     return {
       ...row,
@@ -668,6 +806,8 @@ app.get('/api/rows', (req, res) => {
       conv_metadata: JSON.parse(row.conv_metadata || '{}')
     };
   });
+
+  console.log(`[API /api/rows] Response: ${paginatedData.length} rows (page ${page}/${Math.ceil(rows.length / pageSize)}, total: ${rows.length})`);
 
   res.json({
     data: paginatedData,
@@ -700,31 +840,31 @@ app.use(express.static('.'));
 app.post('/api/upload', (req, res) => {
   upload.single('file')(req, res, (err) => {
     if (err) {
-      return res.status(400).json({ 
-        success: false, 
-        error: err instanceof Error ? err.message : 'Upload failed' 
+      return res.status(400).json({
+        success: false,
+        error: err instanceof Error ? err.message : 'Upload failed'
       });
     }
-    
+
     if (!req.file) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'No file uploaded' 
+      return res.status(400).json({
+        success: false,
+        error: 'No file uploaded'
       });
     }
-    
+
     try {
       // 解析上传的文件
       const result = loadDatasetFile(req.file.filename, true);
-      
+
       if (result.rows.length === 0) {
         fs.unlinkSync(req.file.path); // 删除空文件
-        return res.json({ 
-          success: false, 
-          error: 'No valid data found in file' 
+        return res.json({
+          success: false,
+          error: 'No valid data found in file'
         });
       }
-      
+
       // 创建临时 dataset
       const tempName = `upload_${Date.now()}`;
       datasets[tempName] = {
@@ -735,32 +875,50 @@ app.post('/api/upload', (req, res) => {
         isTemporary: true,
         uploadedAt: new Date().toISOString()
       };
-      
+
       // 1 小时后清理临时文件
       setTimeout(() => {
         cleanupTemporaryDataset(tempName);
       }, 60 * 60 * 1000);
-      
+
       res.json({
         success: true,
-        tempDatasetName: tempName,
+        datasetName: tempName,
         rowCount: result.rows.length,
         sources: result.metricSources.map(s => s.name)
       });
-      
+
     } catch (e) {
       fs.unlinkSync(req.file.path);
-      res.status(500).json({ 
-        success: false, 
-        error: `Failed to parse file: ${e instanceof Error ? e.message : 'Unknown error'}` 
+      res.status(500).json({
+        success: false,
+        error: `Failed to parse file: ${e instanceof Error ? e.message : 'Unknown error'}`
       });
     }
   });
 });
 
-// Delete uploaded dataset
+// Delete uploaded dataset (legacy endpoint)
 app.delete('/api/upload/:name', (req, res) => {
   cleanupTemporaryDataset(req.params.name);
+  res.json({ success: true });
+});
+
+// Delete dataset by name (new endpoint)
+app.delete('/api/datasets/:name', (req, res) => {
+  const name = req.params.name;
+  const ds = datasets[name];
+  
+  if (!ds) {
+    return res.status(404).json({ success: false, error: 'Dataset not found' });
+  }
+  
+  // Only allow deleting uploaded/temporary datasets
+  if (!ds.isTemporary && !name.startsWith('upload_')) {
+    return res.status(403).json({ success: false, error: 'Cannot delete built-in datasets' });
+  }
+  
+  cleanupTemporaryDataset(name);
   res.json({ success: true });
 });
 

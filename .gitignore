@@ -10,6 +10,24 @@ coverage/
 # Large data files
 dataset/*.jsonl
 viewer-static.html
+uploads/
 
 # Windows/WSL metadata
 *:Zone.Identifier
+
+# Temporary/backup files
+*.backup
+*.backup.*
+index.html.vite
+TEST_SEARCH.md
+require.md
+img.png
+
+# Scripts used for development/patching
+add-*.cjs
+add-*.js
+fix-*.cjs
+update-*.cjs
+apply-*.sh
+patch.cjs
+test-*.sh

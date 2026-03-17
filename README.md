@@ -1,30 +1,50 @@
 # Local Preference Dataset Viewer
 
-A lightweight web interface for viewing and comparing LLM evaluation datasets with model comparison capabilities.
+一个用于本地查看和对比 LLM 评估数据集的轻量级 Web 界面，支持多模型输出对比、指标分析和交互式筛选。
 
 ![Dataset Viewer Screenshot](./screenshot.png)
 
-## Features
+---
 
-- 📊 **Multi-Dataset Support** - Load and browse multiple JSONL evaluation datasets
-- 📤 **File Upload** - Upload JSONL files directly from the browser (drag & drop supported)
-- 🤖 **Model Comparison** - Side-by-side comparison of multiple model outputs
-- 📈 **Statistical Analysis** - Accuracy (Pass/Error/Irrelevant), Win Rate, and Score rankings
-- 🎯 **Head-to-Head Comparison** - Compare two specific models across common samples
-- 💬 **Conversation View** - Full conversation context with system/user/assistant messages
-- 🏷️ **Tag Filtering** - View samples by error tags and categories
-- 📝 **Guide Reviews** - Display AI evaluator feedback (G0, G1, etc.) with Pass/Error/Irrelevant classification
-- 📱 **Responsive UI** - Clean, modern interface with Tailwind CSS
-- 🚀 **Static Export** - Generate standalone HTML files for sharing
+## 📋 目录
 
-## Quick Start
+- [功能特性](#-功能特性)
+- [快速开始](#-快速开始)
+- [项目结构](#-项目结构)
+- [数据格式](#-数据格式)
+- [使用指南](#-使用指南)
+- [API 文档](#-api-文档)
+- [开发指南](#-开发指南)
+- [故障排查](#-故障排查)
 
-### Prerequisites
+---
+
+## ✨ 功能特性
+
+| 功能 | 描述 |
+|------|------|
+| 📊 **多数据集支持** | 同时加载和浏览多个 JSONL 评估数据集 |
+| 📤 **文件上传** | 支持拖拽上传 JSONL 文件，自动解析 |
+| 🤖 **模型对比** | 并排对比多个模型的输出结果 |
+| 📈 **统计分析** | 准确率、胜率、评分排名等多维度统计 |
+| 🎯 **头对头对比** | 对比两个特定模型在相同样本上的表现 |
+| 💬 **对话视图** | 查看完整的对话上下文（system/user/assistant） |
+| 🏷️ **标签筛选** | 按错误标签和类别筛选样本 |
+| 🔍 **高级筛选** | 支持模型、语言、数据集、评分范围等多条件筛选 |
+| 📝 **评估反馈** | 显示 AI 评估器反馈（G0, G1 等）及分类结果 |
+| 📱 **响应式 UI** | 基于 Tailwind CSS 的现代化界面 |
+| 🚀 **静态导出** | 生成可独立运行的 HTML 文件，便于分享 |
+
+---
+
+## 🚀 快速开始
+
+### 环境要求
 
 - Node.js 18+
-- npm or yarn
+- npm 或 yarn
 
-### Installation
+### 安装
 
 ```bash
 git clone <repository-url>
@@ -32,198 +52,272 @@ cd local-preference-dataset-viewer
 npm install
 ```
 
-### Running the Development Server
+### 运行开发服务器
 
 ```bash
 npm run dev
 ```
 
-Then open http://localhost:3000 in your browser.
+访问 http://localhost:3000
 
-### Building Static HTML
-
-Generate a standalone HTML file with all data embedded:
+### 构建静态版本
 
 ```bash
 node build-static.js
 ```
 
-This creates `viewer-static.html` which can be opened directly in a browser or shared with others without requiring a server.
+生成 `viewer-static.html`，可直接在浏览器中打开，无需服务器。
 
-## Dataset Format
+---
 
-Place your evaluation datasets in the `dataset/` folder as JSONL files. Each file should contain records with the following structure:
+## 📁 项目结构
+
+```
+local-preference-dataset-viewer/
+├── dataset/                    # 数据集目录（放置 JSONL 文件）
+├── uploads/                    # 上传文件临时存储
+├── src/
+│   ├── components/             # React 组件
+│   │   ├── Sidebar/            # 侧边栏组件
+│   │   │   ├── index.tsx       # 侧边栏主组件
+│   │   │   ├── FilterPanel.tsx # 筛选面板
+│   │   │   ├── SearchPanel.tsx # 搜索面板
+│   │   │   ├── SettingsPanel.tsx # 设置面板
+│   │   │   ├── EditorPanel.tsx   # 编辑器面板
+│   │   │   └── SidebarToggle.tsx # 侧边栏切换按钮
+│   │   ├── DataTable.tsx       # 数据表格组件
+│   │   ├── ConversationDrawer.tsx # 对话详情抽屉
+│   │   └── SummaryCards.tsx    # 统计概览卡片
+│   ├── hooks/                  # 自定义 React Hooks
+│   │   └── useFilters.ts       # 筛选状态管理
+│   ├── types/                  # TypeScript 类型定义
+│   │   └── filters.ts          # 筛选相关类型
+│   ├── App.tsx                 # 主应用组件
+│   ├── main.tsx                # 应用入口
+│   └── index.css               # 全局样式
+├── server.ts                   # Express 后端服务
+├── build-static.js             # 静态构建脚本
+├── index.html                  # 主页面（开发模式）
+├── viewer-static.html          # 生成的静态页面
+├── package.json
+├── tsconfig.json
+├── vite.config.ts
+└── README.md
+```
+
+---
+
+## 📄 数据格式
+
+将评估数据集放入 `dataset/` 目录，格式为 JSONL（每行一个 JSON 对象）。
+
+### 数据结构
 
 ```json
 {
   "id": "dialogue_001",
   "type": "compress",
   "dialog": [
-    {"turn_index": 0, "role": "system", "content": "..."},
-    {"turn_index": 1, "role": "user", "content": "..."},
+    {
+      "turn_index": 0,
+      "role": "system",
+      "content": "系统提示..."
+    },
+    {
+      "turn_index": 1,
+      "role": "user",
+      "content": "用户输入..."
+    },
     {
       "turn_index": 2,
       "role": "assistant",
-      "content": "Ground truth response...",
+      "content": "标准答案...",
       "evaluate": {
         "model-v1": {
-          "content": "Model response...",
+          "content": "模型1的输出...",
           "metrics": {
-            "meteor": {"score": 0.85},
-            "tool_acc": {"score": 1.0}
+            "meteor": { "score": 0.85 },
+            "tool_acc": { "score": 1.0 }
           }
         },
         "model-v2": {
-          "content": "Another model response...",
+          "content": "模型2的输出...",
           "metrics": {
-            "meteor": {"score": 0.72},
-            "tool_acc": {"score": 0.0}
+            "meteor": { "score": 0.72 },
+            "tool_acc": { "score": 0.0 }
           }
         }
       }
     }
   ],
-  "tools": {...},
-  "meta": {"chat_lang": "en"}
+  "tools": { ... },
+  "meta": {
+    "chat_lang": "en"
+  }
 }
 ```
 
-### Required Fields
+### 必需字段
 
-- `id` - Unique identifier for the conversation
-- `dialog` - Array of conversation turns
-- `dialog[].role` - "system", "user", or "assistant"
-- `dialog[].evaluate` - Model outputs with metrics (only on assistant turns)
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `id` | string | 对话唯一标识 |
+| `dialog` | array | 对话轮次数组 |
+| `dialog[].role` | string | 角色：`system` / `user` / `assistant` |
+| `dialog[].evaluate` | object | 模型输出及指标（仅 assistant 角色） |
 
-### Metrics
+### 支持的指标
 
-- `meteor.score` - METEOR similarity score (0-1)
-- `tool_acc.score` - Tool call accuracy (1 = correct, 0 = incorrect)
-- `match_acc.score` - Match accuracy for response comparison
+| 指标 | 说明 | 范围 |
+|------|------|------|
+| `meteor.score` | METEOR 相似度分数 | 0-1 |
+| `tool_acc.score` | 工具调用准确率 | 0 或 1 |
+| `match_acc.score` | 响应匹配准确率 | 0-1 |
 
-## Usage Guide
+---
 
-### Browsing Data
+## 📖 使用指南
 
-1. Select a dataset from the dropdown (or "All Datasets" to view everything)
-2. Navigate through pages using Previous/Next buttons
-3. Click on any row to view full conversation details
+### 浏览数据
 
-### Model Comparison
+1. 从下拉菜单选择数据集（或选择 "All Datasets" 查看全部）
+2. 使用 Previous/Next 按钮分页浏览
+3. 点击任意行查看完整对话详情
 
-1. Select "Model A" and "Model B" from the comparison dropdowns
-2. View the Head-to-Head Comparison card showing:
-   - Win Rate (based on METEOR scores)
-   - Accuracy comparison
-   - Average METEOR scores
+### 筛选数据
 
-### Understanding Statistics
+点击左上角的 `[` 按钮或按键盘 `[` 键打开侧边栏：
 
-- **Accuracy (Pass)** - Percentage of samples where tool calls were correct
-- **Win Rate (Best METEOR)** - Percentage of samples where this model had the highest METEOR score
-- **METEOR Score** - Average METEOR similarity to ground truth
+- **Filters**: 按模型、语言、数据集筛选
+- **Search**: 按关键词搜索
+- **Settings**: 调整页面大小等设置
 
-### Tie Handling
+### 模型对比
 
-When multiple models achieve the same highest METEOR score on a sample, all tied models receive a win for that sample.
+1. 在侧边栏选择要对比的模型
+2. 表格会显示各模型的评分和输出
+3. 点击行查看详细对比
 
-### Score Filtering
+### 键盘快捷键
 
-Samples where all models have METEOR = 0 are excluded from:
-- Win Rate calculations
-- METEOR Score averages
+| 快捷键 | 功能 |
+|--------|------|
+| `[` | 切换侧边栏 |
+| `/` | 聚焦搜索框 |
+| `Ctrl + ←` | 上一页 |
+| `Ctrl + →` | 下一页 |
 
-This is because METEOR = 0 typically indicates "not scored" rather than "zero similarity".
+---
 
-## Project Structure
+## 🔌 API 文档
 
+### 端点列表
+
+#### 获取数据集列表
 ```
-local-preference-dataset-viewer/
-├── dataset/                    # Place your JSONL datasets here
-├── index.html                  # Main application (React + CDN)
-├── server.ts                   # Express server with API endpoints
-├── build-static.js             # Script to generate static HTML
-├── viewer-static.html          # Generated static file (after build)
-├── package.json
-└── README.md
+GET /api/datasets
 ```
 
-## API Endpoints
+#### 获取模型列表
+```
+GET /api/models?dataset={name}
+```
 
-When running the development server:
+#### 获取统计摘要
+```
+GET /api/schema-summary?dataset={name}&source={metric_source}
+```
 
-- `GET /api/datasets` - List all available datasets
-- `GET /api/models?dataset={name}` - List models in dataset
-- `GET /api/schema-summary?dataset={name}` - Statistics summary
-- `GET /api/rows?page={n}&page_size={20}&dataset={name}` - Paginated data
-- `GET /api/compare?modelA={name}&modelB={name}&dataset={name}` - Head-to-head comparison
+#### 获取指标来源
+```
+GET /api/metric-sources
+```
 
-## Configuration
+#### 分页获取数据
+```
+GET /api/rows?page={n}&page_size={20}&dataset={name}&models={m1,m2}&languages={en,zh}
+```
 
-### Port
+#### 头对头对比
+```
+GET /api/compare?modelA={name}&modelB={name}&dataset={name}
+```
 
-Default port is 3000. Set via environment variable:
+#### 上传文件
+```
+POST /api/upload
+Content-Type: multipart/form-data
+
+file: <jsonl-file>
+```
+
+---
+
+## 🛠️ 开发指南
+
+### 技术栈
+
+- **前端**: React 18 + TypeScript + Tailwind CSS
+- **后端**: Express + TypeScript
+- **构建**: Vite + tsx
+
+### 开发命令
 
 ```bash
-PORT=8080 npm run dev
+# 启动开发服务器
+npm run dev
+
+# 类型检查
+npm run lint
+
+# 构建静态版本
+node build-static.js
 ```
 
-### Dataset Directory
+### 添加新功能
 
-Datasets are loaded from the `dataset/` folder by default. Modify `server.ts` or `build-static.js` to change this location.
+1. 组件开发：在 `src/components/` 添加新组件
+2. 状态管理：使用 `src/hooks/` 中的自定义 hooks
+3. API 扩展：在 `server.ts` 中添加新端点
+4. 类型定义：更新 `src/types/` 中的类型文件
 
-## Troubleshooting
+---
 
-### Page loads but shows no data
+## 🐛 故障排查
 
-- Check that JSONL files are in the `dataset/` folder
-- Verify JSONL format matches the expected structure
-- Check browser console for parsing errors
+### 页面加载但没有数据
 
-### CORS errors
+- 检查 JSONL 文件是否在 `dataset/` 目录
+- 验证 JSONL 格式是否符合要求
+- 查看浏览器控制台是否有解析错误
 
-If accessing from a different origin, ensure the server is running or use the static HTML export.
+### CORS 错误
 
-### Large datasets
+- 确保服务器正在运行
+- 或使用静态 HTML 导出版本
 
-For very large datasets (GBs), consider:
-- Splitting into multiple JSONL files
-- Increasing Node.js memory limit: `NODE_OPTIONS="--max-old-space-size=4096"`
+### 大数据集处理
 
-## Browser Compatibility
+对于 GB 级别的数据集：
+- 拆分为多个 JSONL 文件
+- 增加 Node.js 内存限制：`NODE_OPTIONS="--max-old-space-size=4096"`
 
-- Chrome 90+
-- Firefox 88+
-- Safari 14+
-- Edge 90+
+### 上传失败
 
-Requires ES2020 support and modern CSS features.
+- 确保文件扩展名为 `.jsonl`
+- 检查文件大小是否超过 50MB 限制
+- 验证 JSONL 格式正确
 
-## Development
+---
 
-### Tech Stack
+## 📝 许可证
 
-- **Frontend**: React 18, Tailwind CSS (via CDN)
-- **Backend**: Express, TypeScript
-- **Build**: tsx (TypeScript execution)
+MIT License
 
-### Adding Features
+---
 
-The frontend code is embedded in `index.html` as JSX (processed by Babel standalone). Modify the React components directly in the `<script type="text/babel">` tag.
+## 🙏 致谢
 
-## License
-
-MIT License - feel free to use for your own evaluation datasets!
-
-## Contributing
-
-Contributions welcome! Please ensure:
-- Code follows existing style
-- Changes work with both dev server and static export
-- Test with multiple dataset formats
-
-## Acknowledgments
-
-- React Team for the excellent framework
-- Tailwind CSS for utility-first styling
-- METEOR metric creators for text similarity evaluation
+- React Team
+- Tailwind CSS
+- METEOR metric creators
