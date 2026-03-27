@@ -8,6 +8,7 @@ const defaultFilters: FilterState = {
   languages: [],
   metricSource: DEFAULT_METRIC,
   scoreRange: [0, 1],
+  evaluationTags: [-1, 0, 1], // 默认全选
   searchQuery: '',
   datasets: [],
 };
@@ -74,6 +75,10 @@ export function useFilters(availableMetricSources: string[] = []) {
     setFilters(prev => ({ ...prev, datasets }));
   }, []);
 
+  const setEvaluationTags = useCallback((evaluationTags: number[]) => {
+    setFilters(prev => ({ ...prev, evaluationTags }));
+  }, []);
+
   const resetFilters = useCallback(() => {
     setFilters(defaultFilters);
   }, []);
@@ -93,6 +98,7 @@ export function useFilters(availableMetricSources: string[] = []) {
     setLanguages,
     setMetricSource,
     setScoreRange,
+    setEvaluationTags,
     setSearchQuery,
     setDatasets,
     resetFilters,

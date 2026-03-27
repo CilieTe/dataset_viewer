@@ -3,6 +3,7 @@ export interface FilterState {
   languages: string[];
   metricSource: string;
   scoreRange: [number, number];
+  evaluationTags: number[]; // -1, 0, 1 的多选数组
   searchQuery: string;
   datasets: string[];
 }
@@ -21,6 +22,7 @@ export const METRIC_CONFIG: Record<string, MetricConfig> = {
   call_halluc_acc: { min: 0, max: 1, step: 0.01, label: 'Hallucination Check', unit: '' },
   match_acc: { min: 0, max: 1, step: 0.01, label: 'Match Accuracy', unit: '' },
   ppl: { min: 0, max: 100, step: 0.1, label: 'Perplexity', unit: '' },
+  tags: { min: -1, max: 1, step: 1, label: 'Evaluation Tags', unit: '' },
 };
 
 export const DEFAULT_METRIC = 'meteor';

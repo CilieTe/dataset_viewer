@@ -21,6 +21,7 @@ interface SidebarProps {
     setDatasets: (datasets: string[]) => void;
     setMetricSource: (source: string) => void;
     setScoreRange: (range: [number, number]) => void;
+    setEvaluationTags: (tags: number[]) => void;
     setSearchQuery: (query: string) => void;
     resetFilters: () => void;
   };
@@ -35,6 +36,8 @@ interface SidebarProps {
   availableMetricSources: string[];
   summary?: any;
   isDark?: boolean;
+  theme?: 'light' | 'dark' | 'auto';
+  onThemeChange?: (theme: 'light' | 'dark' | 'auto') => void;
 }
 
 export function Sidebar({
@@ -55,6 +58,8 @@ export function Sidebar({
   availableMetricSources,
   summary,
   isDark = false,
+  theme = 'auto',
+  onThemeChange,
 }: SidebarProps) {
   const renderPanel = () => {
     switch (activeModule) {
@@ -73,6 +78,7 @@ export function Sidebar({
             selectedLanguages={filters.languages}
             metricSource={filters.metricSource}
             scoreRange={filters.scoreRange}
+            evaluationTags={filters.evaluationTags}
             availableModels={availableModels}
             availableLanguages={availableLanguages}
             availableMetricSources={availableMetricSources}
@@ -80,6 +86,7 @@ export function Sidebar({
             onLanguagesChange={onFiltersChange.setLanguages}
             onMetricSourceChange={onFiltersChange.setMetricSource}
             onScoreRangeChange={onFiltersChange.setScoreRange}
+            onEvaluationTagsChange={onFiltersChange.setEvaluationTags}
             onReset={onFiltersChange.resetFilters}
             isDark={isDark}
           />
@@ -98,6 +105,8 @@ export function Sidebar({
             pageSize={pageSize}
             onPageSizeChange={onPageSizeChange}
             isDark={isDark}
+            theme={theme}
+            onThemeChange={onThemeChange}
           />
         );
       case 'evaluation':

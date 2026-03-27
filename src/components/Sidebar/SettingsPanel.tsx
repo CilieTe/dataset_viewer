@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { clsx } from 'clsx';
 import { Moon, Sun, Monitor, Rows3 } from 'lucide-react';
 import { Theme } from '../../types/filters';
@@ -7,53 +7,23 @@ interface SettingsPanelProps {
   pageSize: number;
   onPageSizeChange: (size: number) => void;
   isDark?: boolean;
+  theme?: Theme;
+  onThemeChange?: (theme: Theme) => void;
 }
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 
-export function SettingsPanel({ pageSize, onPageSizeChange, isDark = false }: SettingsPanelProps) {
-  const [theme, setTheme] = useState<Theme>('light');
-
-  // Load theme from localStorage on mount
-  useEffect(() => {
-    const savedTheme = localStorage.getItem('theme') as Theme;
-    if (savedTheme && ['light', 'dark', 'auto'].includes(savedTheme)) {
-      setTheme(savedTheme);
-      applyTheme(savedTheme);
-    } else {
-      // Check system preference
-      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      setTheme(prefersDark ? 'dark' : 'light');
-      applyTheme(prefersDark ? 'dark' : 'light');
-    }
-
-    // Listen for system theme changes
-    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
-    const handleChange = (e: MediaQueryListEvent) => {
-      const currentTheme = localStorage.getItem('theme') as Theme;
-      if (currentTheme === 'auto' || !currentTheme) {
-        applyTheme(e.matches ? 'dark' : 'light');
-      }
-    };
-    mediaQuery.addEventListener('change', handleChange);
-    return () => mediaQuery.removeEventListener('change', handleChange);
-  }, []);
-
-  const applyTheme = (newTheme: Theme) => {
-    const root = document.documentElement;
-    
-    if (newTheme === 'auto') {
-      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      root.classList.toggle('dark', prefersDark);
-    } else {
-      root.classList.toggle('dark', newTheme === 'dark');
-    }
-  };
-
+export function SettingsPanel({ 
+  pageSize, 
+  onPageSizeChange, 
+  isDark = false,
+  theme = 'auto',
+  onThemeChange 
+}: SettingsPanelProps) {
   const handleThemeChange = (newTheme: Theme) => {
-    setTheme(newTheme);
-    localStorage.setItem('theme', newTheme);
-    applyTheme(newTheme);
+    if (onThemeChange) {
+      onThemeChange(newTheme);
+    }
   };
 
   const themeOptions: { value: Theme; icon: React.ElementType; label: string }[] = [
@@ -63,12 +33,21 @@ export function SettingsPanel({ pageSize, onPageSizeChange, isDark = false }: Se
   ];
 
   return (
-    <div className="p-4 space-y-6">
-      <h3 className="text-sm font-semibold text-neutral-900">Settings</h3>
+    <div className={clsx(
+      "p-4 space-y-6 transition-colors duration-200",
+      isDark ? "text-neutral-100" : "text-neutral-900"
+    )}>
+      <h3 className={clsx(
+        "text-sm font-semibold",
+        isDark ? "text-neutral-100" : "text-neutral-900"
+      )}>Settings</h3>
 
       {/* Page Size */}
       <div className="space-y-2">
-        <label className="text-xs font-medium text-neutral-500 uppercase tracking-wider flex items-center gap-2">
+        <label className={clsx(
+          "text-xs font-medium uppercase tracking-wider flex items-center gap-2",
+          isDark ? "text-neutral-400" : "text-neutral-500"
+        )}>
           <Rows3 className="w-3.5 h-3.5" />
           Rows per page
         </label>
@@ -80,8 +59,12 @@ export function SettingsPanel({ pageSize, onPageSizeChange, isDark = false }: Se
               className={clsx(
                 "px-3 py-1.5 text-sm rounded-lg border transition-all",
                 pageSize === size
-                  ? "bg-indigo-50 border-indigo-500 text-indigo-700"
-                  : "bg-white border-neutral-200 text-neutral-600 hover:border-neutral-300"
+                  ? isDark 
+                    ? "bg-indigo-900/50 border-indigo-500 text-indigo-300"
+                    : "bg-indigo-50 border-indigo-500 text-indigo-700"
+                  : isDark
+                    ? "bg-neutral-800 border-neutral-700 text-neutral-300 hover:border-neutral-600"
+                    : "bg-white border-neutral-200 text-neutral-600 hover:border-neutral-300"
               )}
             >
               {size}
@@ -92,7 +75,10 @@ export function SettingsPanel({ pageSize, onPageSizeChange, isDark = false }: Se
 
       {/* Theme */}
       <div className="space-y-2">
-        <label className="text-xs font-medium text-neutral-500 uppercase tracking-wider">
+        <label className={clsx(
+          "text-xs font-medium uppercase tracking-wider",
+          isDark ? "text-neutral-400" : "text-neutral-500"
+        )}>
           Theme
         </label>
         <div className="grid grid-cols-3 gap-2">
@@ -103,8 +89,12 @@ export function SettingsPanel({ pageSize, onPageSizeChange, isDark = false }: Se
               className={clsx(
                 "flex flex-col items-center gap-1.5 p-3 rounded-lg border transition-all",
                 theme === value
-                  ? "border-indigo-500 bg-indigo-50 text-indigo-700"
-                  : "border-neutral-200 text-neutral-500 hover:border-neutral-300"
+                  ? isDark
+                    ? "border-indigo-500 bg-indigo-900/50 text-indigo-300"
+                    : "border-indigo-500 bg-indigo-50 text-indigo-700"
+                  : isDark
+                    ? "border-neutral-700 text-neutral-400 hover:border-neutral-600"
+                    : "border-neutral-200 text-neutral-500 hover:border-neutral-300"
               )}
             >
               <Icon className="w-5 h-5" />
@@ -115,26 +105,44 @@ export function SettingsPanel({ pageSize, onPageSizeChange, isDark = false }: Se
       </div>
 
       {/* Keyboard shortcuts */}
-      <div className="pt-4 border-t border-neutral-200">
-        <h4 className="text-xs font-medium text-neutral-500 uppercase tracking-wider mb-3">
+      <div className={clsx(
+        "pt-4 border-t",
+        isDark ? "border-neutral-700" : "border-neutral-200"
+      )}>
+        <h4 className={clsx(
+          "text-xs font-medium uppercase tracking-wider mb-3",
+          isDark ? "text-neutral-400" : "text-neutral-500"
+        )}>
           Keyboard Shortcuts
         </h4>
         <div className="space-y-2 text-sm">
           <div className="flex justify-between">
-            <span className="text-neutral-600">Toggle sidebar</span>
-            <kbd className="px-2 py-0.5 bg-neutral-100 rounded text-xs font-mono">[</kbd>
+            <span className={isDark ? "text-neutral-300" : "text-neutral-600"}>Toggle sidebar</span>
+            <kbd className={clsx(
+              "px-2 py-0.5 rounded text-xs font-mono",
+              isDark ? "bg-neutral-800 text-neutral-300" : "bg-neutral-100"
+            )}>[</kbd>
           </div>
           <div className="flex justify-between">
-            <span className="text-neutral-600">Next page</span>
-            <kbd className="px-2 py-0.5 bg-neutral-100 rounded text-xs font-mono">→</kbd>
+            <span className={isDark ? "text-neutral-300" : "text-neutral-600"}>Next page</span>
+            <kbd className={clsx(
+              "px-2 py-0.5 rounded text-xs font-mono",
+              isDark ? "bg-neutral-800 text-neutral-300" : "bg-neutral-100"
+            )}>→</kbd>
           </div>
           <div className="flex justify-between">
-            <span className="text-neutral-600">Previous page</span>
-            <kbd className="px-2 py-0.5 bg-neutral-100 rounded text-xs font-mono">←</kbd>
+            <span className={isDark ? "text-neutral-300" : "text-neutral-600"}>Previous page</span>
+            <kbd className={clsx(
+              "px-2 py-0.55 rounded text-xs font-mono",
+              isDark ? "bg-neutral-800 text-neutral-300" : "bg-neutral-100"
+            )}>←</kbd>
           </div>
           <div className="flex justify-between">
-            <span className="text-neutral-600">Search</span>
-            <kbd className="px-2 py-0.5 bg-neutral-100 rounded text-xs font-mono">/</kbd>
+            <span className={isDark ? "text-neutral-300" : "text-neutral-600"}>Search</span>
+            <kbd className={clsx(
+              "px-2 py-0.5 rounded text-xs font-mono",
+              isDark ? "bg-neutral-800 text-neutral-300" : "bg-neutral-100"
+            )}>/</kbd>
           </div>
         </div>
       </div>

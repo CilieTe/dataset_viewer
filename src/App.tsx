@@ -38,6 +38,7 @@ export default function App() {
 
   // Dark mode state
   const [isDark, setIsDark] = useState(false);
+  const [theme, setTheme] = useState<'light' | 'dark' | 'auto'>('auto');
 
   // Filters
   const {
@@ -47,6 +48,7 @@ export default function App() {
     setDatasets,
     setMetricSource,
     setScoreRange,
+    setEvaluationTags,
     setSearchQuery,
     resetFilters,
     hasActiveFilters,
@@ -55,22 +57,19 @@ export default function App() {
 
   // Initialize dark mode
   useEffect(() => {
-    const savedTheme = localStorage.getItem('theme');
+    const savedTheme = (localStorage.getItem('theme') as 'light' | 'dark' | 'auto') || 'auto';
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    const shouldBeDark = savedTheme === 'dark' || (savedTheme === 'auto' && prefersDark);
     
-    if (shouldBeDark) {
-      document.documentElement.classList.add('dark');
-      setIsDark(true);
-    } else {
-      document.documentElement.classList.remove('dark');
-      setIsDark(false);
-    }
+    setTheme(savedTheme);
+    const shouldBeDark = savedTheme === 'dark' || (savedTheme === 'auto' && prefersDark);
+    setIsDark(shouldBeDark);
+    document.documentElement.classList.toggle('dark', shouldBeDark);
 
     // Listen for system theme changes
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
     const handleChange = () => {
-      if (savedTheme === 'auto' || !savedTheme) {
+      const currentTheme = (localStorage.getItem('theme') as 'light' | 'dark' | 'auto') || 'auto';
+      if (currentTheme === 'auto') {
         const newDark = mediaQuery.matches;
         setIsDark(newDark);
         document.documentElement.classList.toggle('dark', newDark);
@@ -80,21 +79,48 @@ export default function App() {
     return () => mediaQuery.removeEventListener('change', handleChange);
   }, []);
 
+  // Unified theme change handler
+  const handleThemeChange = (newTheme: 'light' | 'dark' | 'auto') => {
+    setTheme(newTheme);
+    localStorage.setItem('theme', newTheme);
+    
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const shouldBeDark = newTheme === 'dark' || (newTheme === 'auto' && prefersDark);
+    setIsDark(shouldBeDark);
+    document.documentElement.classList.toggle('dark', shouldBeDark);
+  };
+
+  // Fetch summary and metric sources when datasets filter changes
   useEffect(() => {
     fetchSummary();
     fetchMetricSources();
-  }, []);
+  }, [filters.datasets]);
 
-  // Fetch data when page or pageSize changes
+  // Fetch data when page, pageSize, or any filter changes
   useEffect(() => {
     fetchData(page, pageSize);
-  }, [page, pageSize]);
+  }, [
+    page,
+    pageSize,
+    filters.models,
+    filters.languages,
+    filters.datasets,
+    filters.metricSource,
+    filters.scoreRange,
+    filters.evaluationTags,
+    appliedSearchQuery,
+  ]);
 
   // Fetch data when filters change (and reset to page 1)
   useEffect(() => {
     setPage(1);
     fetchData(1, pageSize);
   }, [filters.models, filters.languages, filters.datasets, filters.metricSource]);
+
+  // Re-fetch summary (including models list) when dataset filter changes
+  useEffect(() => {
+    fetchSummary();
+  }, [filters.datasets]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -132,6 +158,9 @@ export default function App() {
   const fetchSummary = async () => {
     try {
       const params = new URLSearchParams();
+      // Pass dataset filter if exactly one is selected
+      const datasetParam = filters.datasets.length === 1 ? filters.datasets[0] : 'all';
+      params.append('dataset', datasetParam);
       if (filters.metricSource) {
         params.append('source', filters.metricSource);
       }
@@ -172,6 +201,16 @@ export default function App() {
       }
       if (appliedSearchQuery.trim()) {
         params.append('search', appliedSearchQuery.trim());
+      }
+      if (filters.metricSource) {
+        params.append('metricSource', filters.metricSource);
+      }
+      if (filters.scoreRange[0] !== 0 || filters.scoreRange[1] !== 1) {
+        params.append('scoreMin', String(filters.scoreRange[0]));
+        params.append('scoreMax', String(filters.scoreRange[1]));
+      }
+      if (filters.evaluationTags.length > 0) {
+        params.append('evaluationTags', filters.evaluationTags.join(','));
       }
 
       const url = `/api/rows?${params}`;
@@ -274,6 +313,7 @@ export default function App() {
                 models={summary?.models || []} 
                 onRowClick={setSelectedRow}
                 isDark={isDark}
+                metricSource={filters.metricSource}
               />
             </div>
 
@@ -363,10 +403,8 @@ export default function App() {
           {/* Theme Toggle */}
           <button
             onClick={() => {
-              const newDark = !isDark;
-              setIsDark(newDark);
-              document.documentElement.classList.toggle('dark', newDark);
-              localStorage.setItem('theme', newDark ? 'dark' : 'light');
+              // Toggle between light and dark (skip auto for quick toggle)
+              handleThemeChange(isDark ? 'light' : 'dark');
             }}
             className={clsx(
               "p-2 rounded-lg transition-colors",
@@ -455,6 +493,7 @@ export default function App() {
             setDatasets,
             setMetricSource,
             setScoreRange,
+            setEvaluationTags,
             setSearchQuery,
             resetFilters,
           }}
@@ -473,6 +512,8 @@ export default function App() {
           availableMetricSources={availableMetricSources.length > 0 ? availableMetricSources : ['meteor']}
           summary={summary}
           isDark={isDark}
+          theme={theme}
+          onThemeChange={handleThemeChange}
         />
 
         {/* Main Content */}

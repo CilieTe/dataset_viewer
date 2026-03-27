@@ -64,6 +64,7 @@ interface ModelOutput {
   content: string;
   metrics?: Record<string, { score: number; meta?: any }>;
   meta?: any;
+  tags?: string[];
 }
 
 interface MetricSource {
@@ -159,7 +160,8 @@ function convertToRows(data: DatasetRow[], datasetName: string): { rows: ParsedR
     'tool_acc': { type: 'accuracy', displayName: 'Tool Call Accuracy' },
     'call_halluc_acc': { type: 'accuracy', displayName: 'Hallucination Check' },
     'match_acc': { type: 'accuracy', displayName: 'Match Accuracy' },
-    'ppl': { type: 'score', displayName: 'Perplexity' }
+    'ppl': { type: 'score', displayName: 'Perplexity' },
+    'tags': { type: 'score', displayName: 'Evaluation Tags' }
   };
 
   // Helper functions for parsing guide reviews
@@ -249,7 +251,7 @@ function convertToRows(data: DatasetRow[], datasetName: string): { rows: ParsedR
         for (const guide of guideReviews) {
           const guideKey = guide.name.replace(/[^a-zA-Z0-9]/g, '_');
           const result = parseGuideResult(guide.content);
-          row[`metric_${guideKey}_${suffix}`] = result;
+          row[`score_${guideKey}_${suffix}`] = result;
 
           // 发现新的 metric source
           if (!discoveredSources.has(guideKey)) {
@@ -267,6 +269,32 @@ function convertToRows(data: DatasetRow[], datasetName: string): { rows: ParsedR
           const suffix = modelName.replace(/[^a-zA-Z0-9]/g, '_');
           row[`model_${suffix}`] = modelName;
           row[`conversation_${suffix}`] = output.content;
+          
+          // 从 turn.tags 或 output.tags 提取 tags
+          // 优先使用 output.tags（mandiri 格式），如果没有则使用 turn.tags（eval_turn-aware_guide 格式）
+          let tagValue = 0;
+          const tagsSource = (output.tags && output.tags.length > 0) ? output.tags : turn.tags;
+          if (tagsSource && tagsSource.length > 0) {
+            const firstTag = tagsSource[0];
+            // 如果是数字，直接解析
+            if (!isNaN(parseInt(firstTag))) {
+              tagValue = parseInt(firstTag);
+            } else {
+              // 如果是字母，映射为数字 (A=1, B=2, ...)
+              const upperTag = firstTag.toUpperCase();
+              if (upperTag >= 'A' && upperTag <= 'Z') {
+                tagValue = upperTag.charCodeAt(0) - 'A'.charCodeAt(0) + 1;
+              }
+            }
+          }
+          row[`score_tags_${suffix}`] = tagValue;
+          if (!discoveredSources.has('tags')) {
+            discoveredSources.set('tags', {
+              name: 'Evaluation Tags',
+              key: 'tags',
+              type: 'score'
+            });
+          }
 
           // Process all metrics from this model output
           if (output.metrics) {
@@ -294,16 +322,7 @@ function convertToRows(data: DatasetRow[], datasetName: string): { rows: ParsedR
               const value = typeof metricData === 'object' && metricData !== null
                 ? (metricData as any).score
                 : metricData;
-              row[`metric_${metricKey}_${suffix}`] = value;
-
-              // Also store backwards-compatible keys for meteor/tool_acc
-              if (metricKey === 'meteor') {
-                row[`score_${suffix}`] = value?.toFixed?.(3) || '0';
-              } else if (metricKey === 'tool_acc' || metricKey === 'call_halluc_acc') {
-                row[`accuracy_${suffix}`] = value === 1.0 ? 1 : 0;
-              } else if (metricKey === 'match_acc') {
-                row[`match_acc_${suffix}`] = value?.toFixed?.(3) || '0';
-              }
+              row[`score_${metricKey}_${suffix}`] = value;
             }
           }
         }
@@ -339,6 +358,11 @@ function loadAllDatasets() {
 function getRows(datasetFilter: 'all' | string): ParsedRow[] {
   if (datasetFilter === 'all') {
     return Object.values(datasets).flatMap(d => d.rows);
+  }
+  // Support multiple datasets (comma-separated)
+  const datasetNames = datasetFilter.split(',').map(d => d.trim()).filter(Boolean);
+  if (datasetNames.length > 1) {
+    return datasetNames.flatMap(name => datasets[name]?.rows || []);
   }
   return datasets[datasetFilter]?.rows || [];
 }
@@ -572,6 +596,7 @@ app.get('/api/schema-summary', (req, res) => {
     winCount: number;
     scoredCount: number;
     guideResults: number[];
+    tagResults: number[];
   }> = {};
 
   let validScoredRows = 0;
@@ -598,6 +623,7 @@ app.get('/api/schema-summary', (req, res) => {
             winCount: 0,
             scoredCount: 0,
             guideResults: [],
+            tagResults: [],
             name: modelName
           };
         }
@@ -607,13 +633,15 @@ app.get('/api/schema-summary', (req, res) => {
         }
 
         // Get score from the selected source
-        const metricValue = row[`metric_${sourceKey}_${suffix}`];
+        const metricValue = row[`score_${sourceKey}_${suffix}`];
         // If source doesn't exist for this row, use 0 (not fallback to METEOR)
         const score = typeof metricValue === 'number' ? metricValue : 0;
 
         // For guide sources (-1, 0, 1), collect results
         if (sourceKey.includes('G0') || sourceKey.includes('G1') || sourceKey.includes('guide')) {
           modelStats[suffix].guideResults.push(score);
+        } else if (sourceKey === 'tags') {
+          modelStats[suffix].tagResults.push(score);
         }
 
         if (score > 0) {
@@ -647,6 +675,7 @@ app.get('/api/schema-summary', (req, res) => {
       avgMatchAcc: stats.count > 0 ? (stats.totalMatchAcc / stats.count) : 0,
       winRate: validScoredRows > 0 ? (stats.winCount / validScoredRows) : 0,
       guideResults: stats.guideResults,
+      tagResults: stats.tagResults,
     };
   });
 
@@ -671,9 +700,9 @@ app.get('/api/schema-summary', (req, res) => {
 
   rows.forEach(row => {
     Object.keys(row).forEach(key => {
-      if (key.startsWith('metric_')) {
-        // Remove 'metric_' prefix
-        const withoutPrefix = key.substring(7); // Remove 'metric_'
+      if (key.startsWith('score_')) {
+        // Remove 'score_' prefix
+        const withoutPrefix = key.substring(6); // Remove 'score_'
 
         // Try to match known source names
         let matchedSource = '';
@@ -696,8 +725,8 @@ app.get('/api/schema-summary', (req, res) => {
     const values: number[] = [];
     rows.forEach(row => {
       Object.keys(row).forEach(key => {
-        // Match keys that start with metric_<sourceName>_
-        if (key.startsWith(`metric_${sourceName}_`)) {
+        // Match keys that start with score_<sourceName>_
+        if (key.startsWith(`score_${sourceName}_`)) {
           const val = row[key];
           if (typeof val === 'number' && !isNaN(val)) {
             values.push(val);
@@ -732,14 +761,22 @@ app.get('/api/schema-summary', (req, res) => {
 app.get('/api/rows', (req, res) => {
   const page = parseInt(req.query.page as string) || 1;
   const pageSize = parseInt(req.query.page_size as string) || 20;
-  const datasetFilter = (req.query.dataset as string) || 'all';
+  // Support both 'dataset' (single) and 'datasets' (multiple) params
+  const datasetsParam = (req.query.datasets as string)?.split(',').filter(Boolean) || [];
+  const datasetFilter = datasetsParam.length > 0 ? datasetsParam.join(',') : (req.query.dataset as string) || 'all';
   const modelsFilter = (req.query.models as string)?.split(',').filter(Boolean) || [];
   const languagesFilter = (req.query.languages as string)?.split(',').filter(Boolean) || [];
   const searchQuery = (req.query.search as string)?.toLowerCase().trim() || '';
+  const metricSource = (req.query.metricSource as string) || 'score';
+  const scoreMin = parseFloat(req.query.scoreMin as string) || 0;
+  const scoreMax = parseFloat(req.query.scoreMax as string) || 1;
+  const evaluationTagsParam = (req.query.evaluationTags as string) || '';
+  const evaluationTags = evaluationTagsParam ? evaluationTagsParam.split(',').map(Number).filter(n => !isNaN(n)) : [];
 
   // Debug logging
   console.log(`[API /api/rows] page=${page}, pageSize=${pageSize}, dataset=${datasetFilter}, search="${searchQuery}"`);
   console.log(`[API /api/rows] modelsFilter=[${modelsFilter.join(', ')}], languagesFilter=[${languagesFilter.join(', ')}]`);
+  console.log(`[API /api/rows] metricSource=${metricSource}, scoreRange=[${scoreMin}, ${scoreMax}], evaluationTags=[${evaluationTags.join(', ')}]`);
 
   let rows = getRows(datasetFilter);
   console.log(`[API /api/rows] Total rows before filter: ${rows.length}`);
@@ -754,6 +791,51 @@ app.get('/api/rows', (req, res) => {
   // Apply language filter
   if (languagesFilter.length > 0) {
     rows = rows.filter(row => languagesFilter.includes(row.language));
+  }
+
+  // Filter by metricSource and scoreRange/evaluationTags
+  if (metricSource && rows.length > 0) {
+    const beforeCount = rows.length;
+    
+    // Use modelsFilter if provided, otherwise extract from first row
+    let modelSuffixes: string[];
+    if (modelsFilter.length > 0) {
+      modelSuffixes = modelsFilter;
+    } else {
+      // Extract model suffixes from first row
+      modelSuffixes = [];
+      Object.keys(rows[0]).forEach(key => {
+        if (key.startsWith('model_')) {
+          modelSuffixes.push(key.substring(6));
+        }
+      });
+    }
+    
+    rows = rows.filter(row => {
+      // For tags with OR logic: show row if ANY model matches selected tags
+      if (metricSource === 'tags') {
+        // Check if any model has a tag in evaluationTags
+        const anyModelMatches = modelSuffixes.some(suffix => {
+          const tagValue = row[`score_tags_${suffix}`];
+          if (tagValue === undefined || tagValue === null) return false;
+          const numericTag = Number(tagValue);
+          if (isNaN(numericTag)) return false;
+          return evaluationTags.includes(numericTag);
+        });
+        return evaluationTags.length === 0 || anyModelMatches;
+      } else {
+        // For numeric scores, check if ALL models pass the range filter
+        return modelSuffixes.every(suffix => {
+          const score = row[`score_${metricSource}_${suffix}`];
+          if (score === undefined || score === null) return true; // No score for this model, don't filter
+          const numericScore = Number(score);
+          if (isNaN(numericScore)) return true;
+          return numericScore >= scoreMin && numericScore <= scoreMax;
+        });
+      }
+    });
+    
+    console.log(`[API /api/rows] Metric filter (${metricSource}): ${beforeCount} -> ${rows.length} rows`);
   }
 
   // Apply search filter

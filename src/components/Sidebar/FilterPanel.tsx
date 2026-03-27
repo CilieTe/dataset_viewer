@@ -8,6 +8,7 @@ interface FilterPanelProps {
   selectedLanguages: string[];
   metricSource: string;
   scoreRange: [number, number];
+  evaluationTags: number[];
   availableModels: Array<{ suffix: string; name: string }>;
   availableLanguages: string[];
   availableMetricSources: string[];
@@ -15,6 +16,7 @@ interface FilterPanelProps {
   onLanguagesChange: (languages: string[]) => void;
   onMetricSourceChange: (source: string) => void;
   onScoreRangeChange: (range: [number, number]) => void;
+  onEvaluationTagsChange: (tags: number[]) => void;
   onReset: () => void;
   isDark?: boolean;
 }
@@ -24,6 +26,7 @@ export function FilterPanel({
   selectedLanguages,
   metricSource,
   scoreRange,
+  evaluationTags,
   availableModels,
   availableLanguages,
   availableMetricSources,
@@ -31,6 +34,7 @@ export function FilterPanel({
   onLanguagesChange,
   onMetricSourceChange,
   onScoreRangeChange,
+  onEvaluationTagsChange,
   onReset,
   isDark = false,
 }: FilterPanelProps) {
@@ -77,51 +81,100 @@ export function FilterPanel({
         </div>
       </div>
 
-      {/* Score Range */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
+      {/* Evaluation Tags (only for tags metric source) */}
+      {metricSource === 'tags' && (
+        <div className="space-y-2">
           <label className="text-xs font-medium text-neutral-500 uppercase tracking-wider">
-            {config.label} Range
+            Evaluation Tags
           </label>
-          <span className="text-xs text-neutral-600 font-mono">
-            {scoreRange[0].toFixed(2)} - {scoreRange[1].toFixed(2)} {config.unit}
-          </span>
+          <div className="space-y-1">
+            {[
+              { value: -1, label: 'Error', color: 'red' },
+              { value: 0, label: 'Invalid', color: 'gray' },
+              { value: 1, label: 'Pass', color: 'green' },
+            ].map((tag) => (
+              <label
+                key={tag.value}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-neutral-50 cursor-pointer"
+              >
+                <input
+                  type="checkbox"
+                  checked={evaluationTags.includes(tag.value)}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      onEvaluationTagsChange([...evaluationTags, tag.value]);
+                    } else {
+                      onEvaluationTagsChange(evaluationTags.filter((t) => t !== tag.value));
+                    }
+                  }}
+                  className="w-4 h-4 text-indigo-600 border-neutral-300 rounded focus:ring-indigo-500"
+                />
+                <span className={clsx(
+                  "text-sm font-medium",
+                  tag.color === 'red' && "text-red-600",
+                  tag.color === 'gray' && "text-neutral-500",
+                  tag.color === 'green' && "text-green-600"
+                )}>
+                  {tag.label} ({tag.value})
+                </span>
+              </label>
+            ))}
+          </div>
+          {evaluationTags.length === 0 && (
+            <p className="text-xs text-amber-600 px-2">
+              ⚠️ No tags selected - no rows will be shown
+            </p>
+          )}
         </div>
-        
-        {/* Dual Slider Simulation */}
+      )}
+
+      {/* Score Range (only for non-tags metric sources) */}
+      {metricSource !== 'tags' && (
         <div className="space-y-3">
-          <div className="relative h-2 bg-neutral-200 rounded-full">
-            <div 
-              className="absolute h-full bg-indigo-500 rounded-full"
-              style={{
-                left: `${((scoreRange[0] - config.min) / (config.max - config.min)) * 100}%`,
-                right: `${100 - ((scoreRange[1] - config.min) / (config.max - config.min)) * 100}%`,
-              }}
-            />
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-medium text-neutral-500 uppercase tracking-wider">
+              {config.label} Range
+            </label>
+            <span className="text-xs text-neutral-600 font-mono">
+              {scoreRange[0].toFixed(2)} - {scoreRange[1].toFixed(2)} {config.unit}
+            </span>
           </div>
-          <div className="flex gap-2">
-            <input
-              type="number"
-              value={scoreRange[0]}
-              min={config.min}
-              max={scoreRange[1]}
-              step={config.step}
-              onChange={(e) => onScoreRangeChange([Number(e.target.value), scoreRange[1]])}
-              className="w-20 px-2 py-1 text-sm border border-neutral-300 rounded focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
-            />
-            <span className="text-neutral-400 self-center">-</span>
-            <input
-              type="number"
-              value={scoreRange[1]}
-              min={scoreRange[0]}
-              max={config.max}
-              step={config.step}
-              onChange={(e) => onScoreRangeChange([scoreRange[0], Number(e.target.value)])}
-              className="w-20 px-2 py-1 text-sm border border-neutral-300 rounded focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
-            />
+          
+          {/* Dual Slider Simulation */}
+          <div className="space-y-3">
+            <div className="relative h-2 bg-neutral-200 rounded-full">
+              <div 
+                className="absolute h-full bg-indigo-500 rounded-full"
+                style={{
+                  left: `${((scoreRange[0] - config.min) / (config.max - config.min)) * 100}%`,
+                  right: `${100 - ((scoreRange[1] - config.min) / (config.max - config.min)) * 100}%`,
+                }}
+              />
+            </div>
+            <div className="flex gap-2">
+              <input
+                type="number"
+                value={scoreRange[0]}
+                min={config.min}
+                max={scoreRange[1]}
+                step={config.step}
+                onChange={(e) => onScoreRangeChange([Number(e.target.value), scoreRange[1]])}
+                className="w-20 px-2 py-1 text-sm border border-neutral-300 rounded focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+              />
+              <span className="text-neutral-400 self-center">-</span>
+              <input
+                type="number"
+                value={scoreRange[1]}
+                min={scoreRange[0]}
+                max={config.max}
+                step={config.step}
+                onChange={(e) => onScoreRangeChange([scoreRange[0], Number(e.target.value)])}
+                className="w-20 px-2 py-1 text-sm border border-neutral-300 rounded focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+              />
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Model Filter */}
       <div className="space-y-2">
