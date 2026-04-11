@@ -124,27 +124,33 @@ export function DataTable({ data, models, onRowClick, isDark = false, metricSour
   };
 
   // Get background color based on metric source and score
-  const getScoreBackground = (score: number | undefined, source: string) => {
+  const getScoreBackground = (score: number | undefined | null, source: string) => {
     if (score === undefined || score === null) {
       return isDark ? 'bg-neutral-800 border-neutral-600' : 'bg-neutral-50 border-neutral-200';
     }
 
     if (source === 'tags') {
-      switch (Math.round(score)) {
-        case 1:
-          return isDark 
-            ? 'bg-green-500/15 border-green-500/40 group-hover:border-green-500/60' 
-            : 'bg-green-50/50 border-green-200 group-hover:border-green-300';
-        case -1:
-          return isDark 
-            ? 'bg-red-500/15 border-red-500/40 group-hover:border-red-500/60' 
-            : 'bg-red-50/50 border-red-200 group-hover:border-red-300';
-        case 0:
-        default:
-          return isDark 
-            ? 'bg-neutral-600/30 border-neutral-500/40 group-hover:border-neutral-500/60' 
-            : 'bg-neutral-100/50 border-neutral-300 group-hover:border-neutral-400';
+      // New mapping: Pass(1)=green, Error(-1)=red, Invalid(0)=yellow, Null=null/undefined=gray
+      if (score === 1) {
+        return isDark 
+          ? 'bg-green-500/15 border-green-500/40 group-hover:border-green-500/60' 
+          : 'bg-green-50/50 border-green-200 group-hover:border-green-300';
       }
+      if (score === -1) {
+        return isDark 
+          ? 'bg-red-500/15 border-red-500/40 group-hover:border-red-500/60' 
+          : 'bg-red-50/50 border-red-200 group-hover:border-red-300';
+      }
+      if (score === 0) {
+        // Invalid (0) → yellow/amber
+        return isDark 
+          ? 'bg-amber-500/15 border-amber-500/40 group-hover:border-amber-500/60' 
+          : 'bg-amber-50/50 border-amber-200 group-hover:border-amber-300';
+      }
+      // Fallback for other values
+      return isDark 
+        ? 'bg-neutral-600/30 border-neutral-500/40 group-hover:border-neutral-500/60' 
+        : 'bg-neutral-100/50 border-neutral-300 group-hover:border-neutral-400';
     } else if (source === 'deepseek-v3.2-guide') {
       const colorMap: Record<number, string> = isDark ? {
         1: 'bg-red-400/10 border-red-400/30',
@@ -180,21 +186,24 @@ export function DataTable({ data, models, onRowClick, isDark = false, metricSour
   };
 
   // Get status label and icon based on metric source
-  const getStatusDisplay = (score: number | undefined, source: string) => {
+  const getStatusDisplay = (score: number | undefined | null, source: string) => {
     if (score === undefined || score === null) {
-      return { label: 'N/A', icon: <MinusCircle className="w-3.5 h-3.5 text-neutral-400" />, color: 'text-neutral-400' };
+      return { label: 'Null', icon: <MinusCircle className="w-3.5 h-3.5 text-neutral-400" />, color: isDark ? 'text-neutral-400' : 'text-neutral-500' };
     }
 
     if (source === 'tags') {
-      switch (Math.round(score)) {
-        case 1:
-          return { label: 'Pass', icon: <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />, color: isDark ? 'text-green-300' : 'text-green-700' };
-        case -1:
-          return { label: 'Error', icon: <XCircle className="w-3.5 h-3.5 text-red-500" />, color: isDark ? 'text-red-300' : 'text-red-700' };
-        case 0:
-        default:
-          return { label: 'Invalid', icon: <MinusCircle className="w-3.5 h-3.5 text-neutral-400" />, color: isDark ? 'text-neutral-300' : 'text-neutral-600' };
+      // New mapping: Pass(1)=green, Error(-1)=red, Invalid(0)=yellow, Null=null/undefined=gray
+      if (score === 1) {
+        return { label: 'Pass', icon: <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />, color: isDark ? 'text-green-300' : 'text-green-700' };
       }
+      if (score === -1) {
+        return { label: 'Error', icon: <XCircle className="w-3.5 h-3.5 text-red-500" />, color: isDark ? 'text-red-300' : 'text-red-700' };
+      }
+      if (score === 0) {
+        return { label: 'Invalid', icon: <MinusCircle className="w-3.5 h-3.5 text-amber-500" />, color: isDark ? 'text-amber-300' : 'text-amber-700' };
+      }
+      // Fallback for other values
+      return { label: 'Unknown', icon: <MinusCircle className="w-3.5 h-3.5 text-neutral-400" />, color: isDark ? 'text-neutral-300' : 'text-neutral-600' };
     } else if (source === 'deepseek-v3.2-guide') {
       return { label: score.toFixed(1), icon: null, color: isDark ? 'text-neutral-200' : 'text-neutral-700' };
     } else {

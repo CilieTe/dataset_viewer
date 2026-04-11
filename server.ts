@@ -272,15 +272,19 @@ function convertToRows(data: DatasetRow[], datasetName: string): { rows: ParsedR
           
           // 从 turn.tags 或 output.tags 提取 tags
           // 优先使用 output.tags（mandiri 格式），如果没有则使用 turn.tags（eval_turn-aware_guide 格式）
-          let tagValue = 0;
+          let tagValue: number | null = null; // 默认 null 表示无数据
           const tagsSource = (output.tags && output.tags.length > 0) ? output.tags : turn.tags;
           if (tagsSource && tagsSource.length > 0) {
             const firstTag = tagsSource[0];
             // 如果是数字，直接解析
             if (!isNaN(parseInt(firstTag))) {
-              tagValue = parseInt(firstTag);
+              const parsed = parseInt(firstTag);
+              // 只接受 -1, 0, 1 作为有效值
+              if (parsed === -1 || parsed === 0 || parsed === 1) {
+                tagValue = parsed;
+              }
             } else {
-              // 如果是字母，映射为数字 (A=1, B=2, ...)
+              // 如果是字母，映射为数字 (A=1, B=2, ...) - 这是旧格式兼容
               const upperTag = firstTag.toUpperCase();
               if (upperTag >= 'A' && upperTag <= 'Z') {
                 tagValue = upperTag.charCodeAt(0) - 'A'.charCodeAt(0) + 1;
@@ -575,11 +579,73 @@ app.get('/api/compare', (req, res) => {
   res.json(result);
 });
 
-// Schema summary - supports metric source selection
+// Get available turns (unfiltered, for UI display)
+app.get('/api/available-turns', (req, res) => {
+  const datasetFilter = (req.query.dataset as string) || 'all';
+  const rows = getRows(datasetFilter);
+  
+  const turnCounts = new Set<number>();
+  rows.forEach(row => {
+    turnCounts.add(row.turn);
+  });
+  
+  res.json({
+    availableTurns: Array.from(turnCounts).sort((a, b) => a - b)
+  });
+});
+
+// Schema summary - supports metric source selection and filters
 app.get('/api/schema-summary', (req, res) => {
   const datasetFilter = (req.query.dataset as string) || 'all';
-  const sourceKey = (req.query.source as string) || 'meteor'; // Default to meteor
-  const rows = getRows(datasetFilter);
+  const sourceKey = (req.query.source as string) || 'meteor';
+  // 新增：获取 filters 参数
+  const modelsFilter = (req.query.models as string)?.split(',').filter(Boolean) || [];
+  const languagesFilter = (req.query.languages as string)?.split(',').filter(Boolean) || [];
+  const turnsParam = (req.query.turns as string) || '';
+  const turnsFilter = turnsParam ? turnsParam.split(',').map(Number).filter(n => !isNaN(n)) : [];
+  const evaluationTagsParam = (req.query.evaluationTags as string) || '';
+  const evaluationTags = evaluationTagsParam ? evaluationTagsParam.split(',').map(Number).filter(n => !isNaN(n)) : [];
+
+  let rows = getRows(datasetFilter);
+
+  // 应用 model filter
+  if (modelsFilter.length > 0) {
+    rows = rows.filter(row => modelsFilter.some(suffix => row[`model_${suffix}`] !== undefined));
+  }
+
+  // 应用 language filter
+  if (languagesFilter.length > 0) {
+    rows = rows.filter(row => languagesFilter.includes(row.language));
+  }
+
+  // 应用 turn filter
+  if (turnsFilter.length > 0) {
+    rows = rows.filter(row => turnsFilter.includes(row.turn));
+  }
+
+  // 应用 evaluation tags filter (只保留有匹配 tag 的行)
+  if (evaluationTags.length > 0 && sourceKey === 'tags') {
+    rows = rows.filter(row => {
+      // 获取所有 model suffixes
+      const modelSuffixes = Object.keys(row)
+        .filter(key => key.startsWith('model_'))
+        .map(key => key.substring(6));
+      
+      // OR 逻辑：只要任意一个 model 的 tag 匹配即可
+      return modelSuffixes.some(suffix => {
+        const tagValue = row[`score_tags_${suffix}`];
+        // 检查是否匹配 Null (-999 表示筛选 null 值)
+        if (evaluationTags.includes(-999) && (tagValue === undefined || tagValue === null)) {
+          return true;
+        }
+        // 检查是否匹配其他数值
+        if (tagValue !== undefined && tagValue !== null) {
+          return evaluationTags.includes(Number(tagValue));
+        }
+        return false;
+      });
+    });
+  }
 
   const totalRows = rows.length;
   const datasetCounts: Record<string, number> = {};
@@ -829,10 +895,15 @@ app.get('/api/rows', (req, res) => {
         // Check if any model has a tag in evaluationTags
         const anyModelMatches = modelSuffixes.some(suffix => {
           const tagValue = row[`score_tags_${suffix}`];
-          if (tagValue === undefined || tagValue === null) return false;
-          const numericTag = Number(tagValue);
-          if (isNaN(numericTag)) return false;
-          return evaluationTags.includes(numericTag);
+          // 检查是否匹配 Null (-999 表示筛选 null 值)
+          if (evaluationTags.includes(-999) && (tagValue === undefined || tagValue === null)) {
+            return true;
+          }
+          // 检查是否匹配其他数值
+          if (tagValue !== undefined && tagValue !== null) {
+            return evaluationTags.includes(Number(tagValue));
+          }
+          return false;
         });
         return evaluationTags.length === 0 || anyModelMatches;
       } else {

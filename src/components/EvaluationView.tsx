@@ -27,7 +27,8 @@ interface EvaluationViewProps {
 interface TagStats {
   pass: number;      // 1
   error: number;     // -1
-  irrelevant: number; // 0
+  invalid: number;   // 0 (yellow)
+  null: number;      // null (gray)
   total: number;
 }
 
@@ -37,14 +38,20 @@ interface ModelTagStats {
   stats: TagStats;
 }
 
-// Calculate tag statistics from tagResults array
-function calculateTagStats(tagResults: number[]): TagStats {
-  const stats: TagStats = { pass: 0, error: 0, irrelevant: 0, total: tagResults.length };
+// Calculate tag statistics from tagResults array (now contains null for missing data)
+function calculateTagStats(tagResults: (number | null)[]): TagStats {
+  const stats: TagStats = { pass: 0, error: 0, invalid: 0, null: 0, total: tagResults.length };
   
   tagResults.forEach(tag => {
-    if (tag === 1) stats.pass++;
-    else if (tag === -1) stats.error++;
-    else if (tag === 0) stats.irrelevant++;
+    if (tag === null || tag === undefined) {
+      stats.null++;
+    } else if (tag === 1) {
+      stats.pass++;
+    } else if (tag === -1) {
+      stats.error++;
+    } else if (tag === 0) {
+      stats.invalid++;
+    }
   });
   
   return stats;
@@ -63,12 +70,13 @@ function getModelsWithTagStats(models: any[]): ModelTagStats[] {
 
 // Calculate aggregate tag statistics across all models
 function getAggregateTagStats(models: ModelTagStats[]): TagStats {
-  const aggregate: TagStats = { pass: 0, error: 0, irrelevant: 0, total: 0 };
+  const aggregate: TagStats = { pass: 0, error: 0, invalid: 0, null: 0, total: 0 };
   
   models.forEach(model => {
     aggregate.pass += model.stats.pass;
     aggregate.error += model.stats.error;
-    aggregate.irrelevant += model.stats.irrelevant;
+    aggregate.invalid += model.stats.invalid;
+    aggregate.null += model.stats.null;
     aggregate.total += model.stats.total;
   });
   
@@ -330,7 +338,7 @@ export function EvaluationView({ summary, availableModels, isDark = false }: Eva
                 </h3>
                 <div className="space-y-4">
                   <TagDistributionBar stats={aggregateTagStats} isDark={isDark} showLegend />
-                  <div className="grid grid-cols-3 gap-4 mt-4">
+                  <div className="grid grid-cols-4 gap-4 mt-4">
                     <TagStatCard 
                       label="Pass (1)" 
                       count={aggregateTagStats.pass} 
@@ -346,8 +354,15 @@ export function EvaluationView({ summary, availableModels, isDark = false }: Eva
                       isDark={isDark}
                     />
                     <TagStatCard 
-                      label="Irrelevant (0)" 
-                      count={aggregateTagStats.irrelevant} 
+                      label="Invalid (0)" 
+                      count={aggregateTagStats.invalid} 
+                      total={aggregateTagStats.total}
+                      color="amber"
+                      isDark={isDark}
+                    />
+                    <TagStatCard 
+                      label="Null" 
+                      count={aggregateTagStats.null} 
                       total={aggregateTagStats.total}
                       color="neutral"
                       isDark={isDark}
@@ -374,15 +389,18 @@ export function EvaluationView({ summary, availableModels, isDark = false }: Eva
                         </span>
                       </div>
                       <TagDistributionBar stats={model.stats} isDark={isDark} compact />
-                      <div className="grid grid-cols-3 gap-2 mt-3 text-xs">
+                      <div className="grid grid-cols-4 gap-2 mt-3 text-xs">
                         <div className="text-emerald-600">
                           Pass: {model.stats.pass} ({((model.stats.pass / model.stats.total) * 100).toFixed(1)}%)
                         </div>
                         <div className="text-red-600">
                           Error: {model.stats.error} ({((model.stats.error / model.stats.total) * 100).toFixed(1)}%)
                         </div>
+                        <div className="text-amber-600">
+                          Invalid: {model.stats.invalid} ({((model.stats.invalid / model.stats.total) * 100).toFixed(1)}%)
+                        </div>
                         <div className={isDark ? "text-neutral-400" : "text-neutral-500"}>
-                          Irrel: {model.stats.irrelevant} ({((model.stats.irrelevant / model.stats.total) * 100).toFixed(1)}%)
+                          Null: {model.stats.null} ({((model.stats.null / model.stats.total) * 100).toFixed(1)}%)
                         </div>
                       </div>
                     </div>
@@ -544,7 +562,8 @@ function TagDistributionBar({
   const total = stats.total || 1; // Avoid division by zero
   const passPct = (stats.pass / total) * 100;
   const errorPct = (stats.error / total) * 100;
-  const irrelevantPct = (stats.irrelevant / total) * 100;
+  const invalidPct = (stats.invalid / total) * 100;
+  const nullPct = (stats.null / total) * 100;
 
   const height = compact ? 'h-2' : 'h-4';
 
@@ -566,18 +585,25 @@ function TagDistributionBar({
             title={`Error: ${stats.error} (${errorPct.toFixed(1)}%)`}
           />
         )}
-        {irrelevantPct > 0 && (
+        {invalidPct > 0 && (
+          <div 
+            className="bg-amber-500 h-full transition-all"
+            style={{ width: `${invalidPct}%` }}
+            title={`Invalid: ${stats.invalid} (${invalidPct.toFixed(1)}%)`}
+          />
+        )}
+        {nullPct > 0 && (
           <div 
             className={clsx("h-full transition-all", isDark ? "bg-neutral-500" : "bg-neutral-400")}
-            style={{ width: `${irrelevantPct}%` }}
-            title={`Irrelevant: ${stats.irrelevant} (${irrelevantPct.toFixed(1)}%)`}
+            style={{ width: `${nullPct}%` }}
+            title={`Null: ${stats.null} (${nullPct.toFixed(1)}%)`}
           />
         )}
       </div>
 
       {/* Legend */}
       {showLegend && (
-        <div className="flex items-center justify-center gap-6 text-sm">
+        <div className="flex items-center justify-center gap-4 text-sm flex-wrap">
           <div className="flex items-center gap-2">
             <div className="w-3 h-3 rounded-full bg-emerald-500" />
             <span className={isDark ? "text-neutral-300" : "text-neutral-600"}>
@@ -591,9 +617,15 @@ function TagDistributionBar({
             </span>
           </div>
           <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full bg-amber-500" />
+            <span className={isDark ? "text-neutral-300" : "text-neutral-600"}>
+              Invalid (0): {stats.invalid}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
             <div className={clsx("w-3 h-3 rounded-full", isDark ? "bg-neutral-500" : "bg-neutral-400")} />
             <span className={isDark ? "text-neutral-300" : "text-neutral-600"}>
-              Irrelevant (0): {stats.irrelevant}
+              Null: {stats.null}
             </span>
           </div>
         </div>
@@ -613,7 +645,7 @@ function TagStatCard({
   label: string; 
   count: number; 
   total: number;
-  color: 'emerald' | 'red' | 'neutral';
+  color: 'emerald' | 'red' | 'amber' | 'neutral';
   isDark: boolean;
 }) {
   const percentage = total > 0 ? ((count / total) * 100).toFixed(1) : '0.0';
@@ -630,6 +662,12 @@ function TagStatCard({
       text: 'text-red-700 dark:text-red-400',
       border: isDark ? 'border-red-800' : 'border-red-200',
       number: 'text-red-600 dark:text-red-400'
+    },
+    amber: {
+      bg: isDark ? 'bg-amber-900/30' : 'bg-amber-50',
+      text: 'text-amber-700 dark:text-amber-400',
+      border: isDark ? 'border-amber-800' : 'border-amber-200',
+      number: 'text-amber-600 dark:text-amber-400'
     },
     neutral: {
       bg: isDark ? 'bg-neutral-700' : 'bg-neutral-100',

@@ -65,7 +65,8 @@ export function Sidebar({
   onThemeChange,
 }: SidebarProps) {
   const renderPanel = () => {
-    // 在 Evaluation 页面时，默认显示 Filters 面板，但仍允许切换到其他面板
+    // 在 Evaluation 页面时，默认显示 Filters 面板
+    // Dataset/Filters 视图都显示 Filters 面板
     const effectiveModule = activeModule === 'evaluation' ? 'filters' : activeModule;
     
     switch (effectiveModule) {

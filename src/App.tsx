@@ -96,6 +96,7 @@ export default function App() {
   useEffect(() => {
     fetchSummary();
     fetchMetricSources();
+    fetchAvailableTurns(); // 获取未过滤的 turns
   }, [filters.datasets]);
 
   // Fetch data when page, pageSize, or any filter changes
@@ -120,10 +121,26 @@ export default function App() {
     fetchData(1, pageSize);
   }, [filters.models, filters.languages, filters.datasets, filters.turns, filters.metricSource]);
 
-  // Re-fetch summary (including models list) when dataset filter changes
+  // Fetch available turns (unfiltered) - only when dataset changes
+  const fetchAvailableTurns = async () => {
+    try {
+      const params = new URLSearchParams();
+      const datasetParam = filters.datasets.length === 1 ? filters.datasets[0] : 'all';
+      params.append('dataset', datasetParam);
+      const res = await fetch(`/api/available-turns?${params}`);
+      const json = await res.json();
+      if (json.availableTurns) {
+        setAvailableTurns(json.availableTurns);
+      }
+    } catch (error) {
+      console.error('Failed to fetch available turns:', error);
+    }
+  };
+
+  // Re-fetch summary when any filter changes (for Evaluation view)
   useEffect(() => {
     fetchSummary();
-  }, [filters.datasets]);
+  }, [filters.datasets, filters.models, filters.languages, filters.turns, filters.evaluationTags, filters.metricSource]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -167,6 +184,19 @@ export default function App() {
       if (filters.metricSource) {
         params.append('source', filters.metricSource);
       }
+      // 传递其他 filters 到后端
+      if (filters.models.length > 0) {
+        params.append('models', filters.models.join(','));
+      }
+      if (filters.languages.length > 0) {
+        params.append('languages', filters.languages.join(','));
+      }
+      if (filters.turns.length > 0) {
+        params.append('turns', filters.turns.join(','));
+      }
+      if (filters.evaluationTags.length > 0) {
+        params.append('evaluationTags', filters.evaluationTags.join(','));
+      }
       const res = await fetch(`/api/schema-summary?${params}`);
       const json = await res.json();
       setSummary(json);
@@ -180,16 +210,7 @@ export default function App() {
       if (json.datasetDistribution) {
         setAvailableDatasets(Object.keys(json.datasetDistribution));
       }
-      if (json.availableTurns) {
-        setAvailableTurns(json.availableTurns);
-      } else if (json.turnRange) {
-        // 兼容旧逻辑
-        const turns = [];
-        for (let i = json.turnRange.min; i <= json.turnRange.max; i++) {
-          turns.push(i);
-        }
-        setAvailableTurns(turns);
-      }
+      // availableTurns 由 fetchAvailableTurns 单独获取，避免随筛选变化
     } catch (error) {
       console.error('Failed to fetch summary:', error);
     }
@@ -384,7 +405,7 @@ export default function App() {
           isDark ? "bg-neutral-700" : "bg-neutral-100"
         )}>
           <button
-            onClick={() => setActiveModule('datasets')}
+            onClick={() => setActiveModule('filters')}
             className={clsx(
               "flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all",
               activeModule !== 'evaluation'

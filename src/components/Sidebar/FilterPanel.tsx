@@ -95,9 +95,10 @@ export function FilterPanel({
           </label>
           <div className="space-y-1">
             {[
-              { value: -1, label: 'Error', color: 'red' },
-              { value: 0, label: 'Invalid', color: 'gray' },
-              { value: 1, label: 'Pass', color: 'green' },
+              { value: 1, label: 'Pass', color: 'green', textClass: 'text-green-600' },
+              { value: -1, label: 'Error', color: 'red', textClass: 'text-red-600' },
+              { value: 0, label: 'Invalid', color: 'yellow', textClass: 'text-amber-600' },
+              { value: -999, label: 'Null', color: 'gray', textClass: 'text-neutral-500' },
             ].map((tag) => (
               <label
                 key={tag.value}
@@ -115,13 +116,8 @@ export function FilterPanel({
                   }}
                   className="w-4 h-4 text-indigo-600 border-neutral-300 rounded focus:ring-indigo-500"
                 />
-                <span className={clsx(
-                  "text-sm font-medium",
-                  tag.color === 'red' && "text-red-600",
-                  tag.color === 'gray' && "text-neutral-500",
-                  tag.color === 'green' && "text-green-600"
-                )}>
-                  {tag.label} ({tag.value})
+                <span className={clsx("text-sm font-medium", tag.textClass)}>
+                  {tag.label}
                 </span>
               </label>
             ))}
