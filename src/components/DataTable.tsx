@@ -310,29 +310,31 @@ export function DataTable({ data, models, onRowClick, isDark = false, metricSour
               {/* Metadata Column - Fixed 180px */}
               <td className="p-3 align-top">
                 <div className="space-y-1">
-                  <div className={clsx("font-mono text-[10px] truncate", isDark ? "text-neutral-500" : "text-neutral-500")} title={row.id}>
-                    {row.id.slice(0, 16)}...
-                  </div>
-                  <div className="flex flex-wrap gap-1">
-                    <span className={clsx(
-                      "inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium uppercase",
-                      isDark ? "bg-neutral-700 text-neutral-300" : "bg-neutral-100 text-neutral-600"
-                    )}>
-                      {row.testpoint}
+                  <div className="flex items-center gap-1">
+                    <span className={clsx("font-mono text-[10px] truncate", isDark ? "text-neutral-500" : "text-neutral-500")} title={row.id}>
+                      {row.id.slice(0, 12)}...
                     </span>
                     <span className={clsx(
-                      "inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium uppercase",
+                      "inline-flex items-center px-1 py-0 rounded text-[9px] font-medium uppercase",
                       isDark ? "bg-neutral-700 text-neutral-300" : "bg-neutral-100 text-neutral-600"
                     )}>
                       {row.language}
                     </span>
+                    <span className={clsx(
+                      "inline-flex items-center px-1 py-0 rounded text-[9px] font-medium",
+                      isDark ? "bg-indigo-500/20 text-indigo-300" : "bg-indigo-50 text-indigo-600"
+                    )}>
+                      T{row.turn}
+                    </span>
                   </div>
-                  <span className={clsx(
-                    "inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-medium",
-                    isDark ? "bg-indigo-500/20 text-indigo-300" : "bg-indigo-50 text-indigo-600"
-                  )}>
-                    T{row.turn}
-                  </span>
+                  {row.node_remark && (
+                    <div className={clsx(
+                      "mt-1 text-[9px] px-1.5 py-0.5 rounded truncate max-w-[160px]",
+                      isDark ? "bg-amber-500/20 text-amber-300" : "bg-amber-50 text-amber-700"
+                    )} title={row.node_remark}>
+                      💬 {row.node_remark}
+                    </div>
+                  )}
                 </div>
               </td>
 

@@ -58,6 +58,7 @@ interface DialogTurn {
   laep?: any;
   loss?: boolean;
   evaluate?: Record<string, ModelOutput>;
+  node_remark?: string;
 }
 
 interface ModelOutput {
@@ -237,6 +238,8 @@ function convertToRows(data: DatasetRow[], datasetName: string): { rows: ParsedR
       };
 
       row['ground_truth'] = turn.content;
+      // 优先使用 laep.remark，如果没有则使用 node_remark
+      row['node_remark'] = turn.laep?.remark || turn.node_remark || '';
 
       // 如果没有 evaluate 但有 review，创建"未知模型"
       if (!turn.evaluate && guideReviews.length > 0) {
@@ -703,11 +706,17 @@ app.get('/api/schema-summary', (req, res) => {
         // Get score from the selected source
         const metricValue = row[`score_${sourceKey}_${suffix}`];
         // If source doesn't exist for this row, use 0 (not fallback to METEOR)
-        const score = typeof metricValue === 'number' ? metricValue : 0;
+        // For tags source, preserve null values to distinguish from invalid (0)
+        let score: number | null;
+        if (sourceKey === 'tags') {
+          score = (metricValue === undefined || metricValue === null) ? null : Number(metricValue);
+        } else {
+          score = typeof metricValue === 'number' ? metricValue : 0;
+        }
 
         // For guide sources (-1, 0, 1), collect results
         if (sourceKey.includes('G0') || sourceKey.includes('G1') || sourceKey.includes('guide')) {
-          modelStats[suffix].guideResults.push(score);
+          modelStats[suffix].guideResults.push(score as number);
         } else if (sourceKey === 'tags') {
           modelStats[suffix].tagResults.push(score);
         }
@@ -967,6 +976,8 @@ app.get('/api/rows', (req, res) => {
   const paginatedData = rows.slice(start, end).map(row => {
     return {
       ...row,
+      testpoint: row.indicator, // 将 indicator 映射为 testpoint
+      node_remark: row.node_remark, // 确保 node_remark 被传递
       full_conversation: JSON.parse(row.full_conversation || '[]'),
       conv_metadata: JSON.parse(row.conv_metadata || '{}')
     };
