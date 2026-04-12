@@ -28,11 +28,19 @@ export function ConversationDrawer({ row, onClose, isDark = false }: Conversatio
     .filter(key => key.startsWith('model_'))
     .map(key => {
       const suffix = key.substring(6); // Remove 'model_' prefix
+      // Get tag value: 1=Pass, -1=Error, 0=Invalid, null/undefined=Null
+      const tagValue = row[`score_tags_${suffix}`];
+      let status: 'pass' | 'error' | 'invalid' | 'null' = 'null';
+      if (tagValue === 1) status = 'pass';
+      else if (tagValue === -1) status = 'error';
+      else if (tagValue === 0) status = 'invalid';
+      
       return {
         suffix,
         name: row[key],
         response: row[`conversation_${suffix}`],
-        isPass: row[`accuracy_${suffix}`] === 1,
+        status,
+        tagValue,
         score: row[`score_${suffix}`],
         matchAcc: row[`match_acc_${suffix}`]
       };
@@ -193,49 +201,84 @@ export function ConversationDrawer({ row, onClose, isDark = false }: Conversatio
 
           {activeTab === 'models' && (
             <div className="space-y-4">
-              {models.map((model) => (
-                <div key={model.suffix} className="bg-white border border-neutral-200 rounded-xl overflow-hidden shadow-sm">
-                  <div className={clsx(
-                    "px-4 py-3 border-b flex items-center justify-between",
-                    model.isPass ? "bg-emerald-50/50 border-emerald-100" : "bg-red-50/50 border-red-100"
-                  )}>
-                    <div className="flex items-center gap-2">
-                      {model.isPass ? (
-                        <CheckCircle2 className="w-5 h-5 text-emerald-500" />
-                      ) : (
-                        <XCircle className="w-5 h-5 text-red-500" />
-                      )}
-                      <h3 className="font-semibold text-neutral-900">{model.name}</h3>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      {model.score && (
-                        <span className="font-mono text-xs font-medium text-neutral-500 bg-white px-2 py-1 rounded border border-neutral-200 shadow-sm" title="METEOR Score">
-                          METEOR: {model.score}
-                        </span>
-                      )}
-                      {model.matchAcc && (
+              {models.map((model) => {
+                // Status styling
+                const statusConfig = {
+                  pass: { 
+                    bg: 'bg-emerald-50/50', 
+                    border: 'border-emerald-100', 
+                    icon: <CheckCircle2 className="w-5 h-5 text-emerald-500" />,
+                    badgeBg: 'bg-emerald-100', 
+                    badgeText: 'text-emerald-700',
+                    label: 'Pass'
+                  },
+                  error: { 
+                    bg: 'bg-red-50/50', 
+                    border: 'border-red-100', 
+                    icon: <XCircle className="w-5 h-5 text-red-500" />,
+                    badgeBg: 'bg-red-100', 
+                    badgeText: 'text-red-700',
+                    label: 'Error'
+                  },
+                  invalid: { 
+                    bg: 'bg-amber-50/50', 
+                    border: 'border-amber-100', 
+                    icon: <XCircle className="w-5 h-5 text-amber-500" />,
+                    badgeBg: 'bg-amber-100', 
+                    badgeText: 'text-amber-700',
+                    label: 'Invalid'
+                  },
+                  null: { 
+                    bg: 'bg-neutral-50/50', 
+                    border: 'border-neutral-200', 
+                    icon: <XCircle className="w-5 h-5 text-neutral-400" />,
+                    badgeBg: 'bg-neutral-100', 
+                    badgeText: 'text-neutral-600',
+                    label: 'Null'
+                  },
+                };
+                const config = statusConfig[model.status];
+                
+                return (
+                  <div key={model.suffix} className="bg-white border border-neutral-200 rounded-xl overflow-hidden shadow-sm">
+                    <div className={clsx(
+                      "px-4 py-3 border-b flex items-center justify-between",
+                      config.bg, config.border
+                    )}>
+                      <div className="flex items-center gap-2">
+                        {config.icon}
+                        <h3 className="font-semibold text-neutral-900">{model.name}</h3>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        {model.score && (
+                          <span className="font-mono text-xs font-medium text-neutral-500 bg-white px-2 py-1 rounded border border-neutral-200 shadow-sm" title="METEOR Score">
+                            METEOR: {model.score}
+                          </span>
+                        )}
+                        {model.matchAcc && (
+                          <span className={clsx(
+                            "font-mono text-xs font-medium px-2 py-1 rounded border shadow-sm",
+                            parseFloat(model.matchAcc) === 1 
+                              ? "bg-emerald-50 text-emerald-700 border-emerald-200" 
+                              : "bg-amber-50 text-amber-700 border-amber-200"
+                          )}>
+                            Match: {model.matchAcc}
+                          </span>
+                        )}
                         <span className={clsx(
-                          "font-mono text-xs font-medium px-2 py-1 rounded border shadow-sm",
-                          parseFloat(model.matchAcc) === 1 
-                            ? "bg-emerald-50 text-emerald-700 border-emerald-200" 
-                            : "bg-amber-50 text-amber-700 border-amber-200"
+                          "text-xs font-bold uppercase tracking-wider px-2 py-1 rounded",
+                          config.badgeBg, config.badgeText
                         )}>
-                          Match: {model.matchAcc}
+                          {config.label}
                         </span>
-                      )}
-                      <span className={clsx(
-                        "text-xs font-bold uppercase tracking-wider px-2 py-1 rounded",
-                        model.isPass ? "bg-emerald-100 text-emerald-700" : "bg-red-100 text-red-700"
-                      )}>
-                        {model.isPass ? 'Pass' : 'Fail'}
-                      </span>
+                      </div>
+                    </div>
+                    <div className="p-5 text-sm leading-relaxed text-neutral-700 whitespace-pre-wrap">
+                      {model.response || <span className="text-neutral-400 italic">No response provided.</span>}
                     </div>
                   </div>
-                  <div className="p-5 text-sm leading-relaxed text-neutral-700 whitespace-pre-wrap">
-                    {model.response || <span className="text-neutral-400 italic">No response provided.</span>}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
 
