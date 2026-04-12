@@ -7,6 +7,7 @@ export interface FilterState {
   searchQuery: string;
   datasets: string[];
   turns: number[]; // ← 新增：turn 筛选
+  loss: ('null' | 'false')[]; // ← 新增：loss 筛选，null 表示 loss = null，false 表示 loss = false
 }
 
 export interface MetricConfig {

@@ -20,6 +20,7 @@ interface SidebarProps {
     setLanguages: (languages: string[]) => void;
     setDatasets: (datasets: string[]) => void;
     setTurns: (turns: number[]) => void;
+    setLoss: (loss: ('null' | 'false')[]) => void;
     setMetricSource: (source: string) => void;
     setScoreRange: (range: [number, number]) => void;
     setEvaluationTags: (tags: number[]) => void;
@@ -93,6 +94,7 @@ export function Sidebar({
             selectedModels={filters.models}
             selectedLanguages={filters.languages}
             selectedTurns={filters.turns}
+            selectedLoss={filters.loss}
             metricSource={filters.metricSource}
             scoreRange={filters.scoreRange}
             evaluationTags={filters.evaluationTags}
@@ -103,6 +105,7 @@ export function Sidebar({
             onModelsChange={onFiltersChange.setModels}
             onLanguagesChange={onFiltersChange.setLanguages}
             onTurnsChange={onFiltersChange.setTurns}
+            onLossChange={onFiltersChange.setLoss}
             onMetricSourceChange={onFiltersChange.setMetricSource}
             onScoreRangeChange={onFiltersChange.setScoreRange}
             onEvaluationTagsChange={onFiltersChange.setEvaluationTags}

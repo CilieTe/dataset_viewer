@@ -21,7 +21,10 @@ interface EvaluationViewProps {
   summary: any;
   availableModels: Array<{ suffix: string; name: string }>;
   isDark?: boolean;
+  currentDataset?: string;
 }
+
+
 
 // Tag statistics types
 interface TagStats {
@@ -94,7 +97,7 @@ function getAggregateTagStats(models: ModelTagStats[]): TagStats {
   return aggregate;
 }
 
-export function EvaluationView({ summary, availableModels, isDark = false }: EvaluationViewProps) {
+export function EvaluationView({ summary, availableModels, isDark = false, currentDataset = 'all' }: EvaluationViewProps) {
   const [selectedModels, setSelectedModels] = useState<string[]>([]);
   const [compareModelA, setCompareModelA] = useState<string>('');
   const [compareModelB, setCompareModelB] = useState<string>('');
@@ -227,7 +230,71 @@ export function EvaluationView({ summary, availableModels, isDark = false }: Eva
 
       {/* Overview Tab */}
       {activeTab === 'overview' && (
-        <div className="space-y-6" />
+        <div className="space-y-6">
+          {/* Evaluation Log */}
+          <div className={clsx("rounded-xl border p-6", themeClasses.bg, themeClasses.border)}>
+            <h3 className={clsx("font-semibold mb-4 flex items-center gap-2", themeClasses.text)}>
+              <BarChart3 className="w-5 h-5 text-indigo-500" />
+              Log
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+              <div>
+                <span className={themeClasses.textSecondary}>Date: </span>
+                <span className={themeClasses.text}>{new Date().toISOString().split('T')[0].replace(/-/g, '/')}</span>
+              </div>
+              <div>
+                <span className={themeClasses.textSecondary}>Prepared by: </span>
+                <span className={themeClasses.text}>Eval Team (annotation & evaluation)</span>
+              </div>
+              <div className="md:col-span-2">
+                <span className={themeClasses.textSecondary}>Model evaluated ({summary?.models?.length || 0}): </span>
+                <span className={themeClasses.text}>
+                  {summary?.models?.map((m: any) => m.name).join(', ') || 'N/A'}
+                </span>
+              </div>
+              <div className="md:col-span-2">
+                <span className={themeClasses.textSecondary}>Dataset: </span>
+                <span className={themeClasses.text}>{currentDataset === 'all' ? 'All Datasets' : currentDataset}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Data Distribution */}
+          {hasTagData && (
+            <div className={clsx("rounded-xl border p-6", themeClasses.bg, themeClasses.border)}>
+              <h3 className={clsx("font-semibold mb-4 flex items-center gap-2", themeClasses.text)}>
+                <TrendingUp className="w-5 h-5 text-indigo-500" />
+                Data Distribution
+              </h3>
+              <div className="space-y-3 text-sm">
+                <div className="flex justify-between items-center py-2 border-b border-dashed border-neutral-200 dark:border-neutral-700">
+                  <span className={themeClasses.textSecondary}>Turn-level learn nodes (loss = null)</span>
+                  <span className={clsx("font-medium", themeClasses.text)}>
+                    {aggregateTagStats.null} ({aggregateTagStats.total > 0 ? ((aggregateTagStats.null / aggregateTagStats.total) * 100).toFixed(1) : '0.0'}%)
+                  </span>
+                </div>
+                <div className="flex justify-between items-center py-2 border-b border-dashed border-neutral-200 dark:border-neutral-700">
+                  <span className={themeClasses.textSecondary}>Turn-level loss nodes</span>
+                  <span className={clsx("font-medium", themeClasses.text)}>
+                    {aggregateTagStats.error + aggregateTagStats.pass + aggregateTagStats.invalid} ({aggregateTagStats.total > 0 ? (((aggregateTagStats.error + aggregateTagStats.pass + aggregateTagStats.invalid) / aggregateTagStats.total) * 100).toFixed(1) : '0.0'}%)
+                  </span>
+                </div>
+                <div className="flex justify-between items-center py-2 border-b border-dashed border-neutral-200 dark:border-neutral-700">
+                  <span className={themeClasses.textSecondary}>Effective annotation data</span>
+                  <span className={clsx("font-medium", themeClasses.text)}>
+                    {aggregateTagStats.pass + aggregateTagStats.error + aggregateTagStats.invalid} ({aggregateTagStats.total > 0 ? (((aggregateTagStats.pass + aggregateTagStats.error + aggregateTagStats.invalid) / aggregateTagStats.total) * 100).toFixed(1) : '0.0'}%)
+                  </span>
+                </div>
+                <div className="flex justify-between items-center py-2">
+                  <span className={themeClasses.textSecondary}>Missing label data</span>
+                  <span className={clsx("font-medium", themeClasses.text)}>
+                    {aggregateTagStats.null} ({aggregateTagStats.total > 0 ? ((aggregateTagStats.null / aggregateTagStats.total) * 100).toFixed(1) : '0.0'}%)
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       )}
 
       {/* Tag Statistics Tab */}

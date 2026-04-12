@@ -7,6 +7,7 @@ interface FilterPanelProps {
   selectedModels: string[];
   selectedLanguages: string[];
   selectedTurns: number[];
+  selectedLoss: ('null' | 'false')[];
   metricSource: string;
   scoreRange: [number, number];
   evaluationTags: number[];
@@ -17,6 +18,7 @@ interface FilterPanelProps {
   onModelsChange: (models: string[]) => void;
   onLanguagesChange: (languages: string[]) => void;
   onTurnsChange: (turns: number[]) => void;
+  onLossChange: (loss: ('null' | 'false')[]) => void;
   onMetricSourceChange: (source: string) => void;
   onScoreRangeChange: (range: [number, number]) => void;
   onEvaluationTagsChange: (tags: number[]) => void;
@@ -28,6 +30,7 @@ export function FilterPanel({
   selectedModels,
   selectedLanguages,
   selectedTurns,
+  selectedLoss,
   metricSource,
   scoreRange,
   evaluationTags,
@@ -38,6 +41,7 @@ export function FilterPanel({
   onModelsChange,
   onLanguagesChange,
   onTurnsChange,
+  onLossChange,
   onMetricSourceChange,
   onScoreRangeChange,
   onEvaluationTagsChange,
@@ -45,7 +49,7 @@ export function FilterPanel({
   isDark = false,
 }: FilterPanelProps) {
   const config = METRIC_CONFIG[metricSource] || { min: 0, max: 1, step: 0.01, label: metricSource, unit: '' };
-  const hasFilters = selectedModels.length > 0 || selectedLanguages.length > 0 || selectedTurns.length > 0;
+  const hasFilters = selectedModels.length > 0 || selectedLanguages.length > 0 || selectedTurns.length > 0 || selectedLoss.length !== 2;
 
   return (
     <div className="p-4 space-y-6">
@@ -306,6 +310,38 @@ export function FilterPanel({
           </div>
         </div>
       )}
+
+      {/* Loss Filter */}
+      <div className="space-y-2">
+        <label className="text-xs font-medium text-neutral-500 uppercase tracking-wider">
+          Loss
+        </label>
+        <div className="flex flex-wrap gap-1.5">
+          {[
+            { value: 'null', label: 'null' },
+            { value: 'false', label: 'false' },
+          ].map((option) => (
+            <button
+              key={option.value}
+              onClick={() => {
+                if (selectedLoss.includes(option.value as 'null' | 'false')) {
+                  onLossChange(selectedLoss.filter(l => l !== option.value));
+                } else {
+                  onLossChange([...selectedLoss, option.value as 'null' | 'false']);
+                }
+              }}
+              className={clsx(
+                "px-2.5 py-1 text-xs rounded-full border transition-all",
+                selectedLoss.includes(option.value as 'null' | 'false')
+                  ? "bg-indigo-50 border-indigo-300 text-indigo-700"
+                  : "bg-white border-neutral-200 text-neutral-600 hover:border-neutral-300"
+              )}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

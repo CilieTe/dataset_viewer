@@ -240,6 +240,8 @@ function convertToRows(data: DatasetRow[], datasetName: string): { rows: ParsedR
       row['ground_truth'] = turn.content;
       // 优先使用 laep.remark，如果没有则使用 node_remark
       row['node_remark'] = turn.laep?.remark || turn.node_remark || '';
+      // 保存 loss 字段 (null 表示 loss = null，false 表示 loss = false)
+      row['loss'] = turn.loss === false ? false : null;
 
       // 如果没有 evaluate 但有 review，创建"未知模型"
       if (!turn.evaluate && guideReviews.length > 0) {
@@ -852,10 +854,12 @@ app.get('/api/rows', (req, res) => {
   const evaluationTags = evaluationTagsParam ? evaluationTagsParam.split(',').map(Number).filter(n => !isNaN(n)) : [];
   const turnsParam = (req.query.turns as string) || '';
   const turnsFilter = turnsParam ? turnsParam.split(',').map(Number).filter(n => !isNaN(n)) : [];
+  const lossParam = (req.query.loss as string) || '';
+  const lossFilter = lossParam ? lossParam.split(',') as ('null' | 'false')[] : [];
 
   // Debug logging
   console.log(`[API /api/rows] page=${page}, pageSize=${pageSize}, dataset=${datasetFilter}, search="${searchQuery}"`);
-  console.log(`[API /api/rows] modelsFilter=[${modelsFilter.join(', ')}], languagesFilter=[${languagesFilter.join(', ')}], turnsFilter=[${turnsFilter.join(', ')}]`);
+  console.log(`[API /api/rows] modelsFilter=[${modelsFilter.join(', ')}], languagesFilter=[${languagesFilter.join(', ')}], turnsFilter=[${turnsFilter.join(', ')}], lossFilter=[${lossFilter.join(', ')}]`);
   console.log(`[API /api/rows] metricSource=${metricSource}, scoreRange=[${scoreMin}, ${scoreMax}], evaluationTags=[${evaluationTags.join(', ')}]`);
 
   let rows = getRows(datasetFilter);
@@ -878,6 +882,18 @@ app.get('/api/rows', (req, res) => {
     const beforeCount = rows.length;
     rows = rows.filter(row => turnsFilter.includes(row.turn));
     console.log(`[API /api/rows] Turn filter: ${beforeCount} -> ${rows.length} rows`);
+  }
+
+  // Apply loss filter
+  if (lossFilter.length > 0 && lossFilter.length < 2) {
+    const beforeCount = rows.length;
+    rows = rows.filter(row => {
+      const rowLoss = row['loss'];
+      // loss 为 null 或 undefined 时视为 'null'
+      const lossValue = rowLoss === false ? 'false' : 'null';
+      return lossFilter.includes(lossValue);
+    });
+    console.log(`[API /api/rows] Loss filter: ${beforeCount} -> ${rows.length} rows`);
   }
 
   // Filter by metricSource and scoreRange/evaluationTags

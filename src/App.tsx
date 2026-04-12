@@ -48,6 +48,7 @@ export default function App() {
     setLanguages,
     setDatasets,
     setTurns,
+    setLoss,
     setMetricSource,
     setScoreRange,
     setEvaluationTags,
@@ -119,7 +120,7 @@ export default function App() {
   useEffect(() => {
     setPage(1);
     fetchData(1, pageSize);
-  }, [filters.models, filters.languages, filters.datasets, filters.turns, filters.metricSource]);
+  }, [filters.models, filters.languages, filters.datasets, filters.turns, filters.loss, filters.metricSource]);
 
   // Fetch available turns (unfiltered) - only when dataset changes
   const fetchAvailableTurns = async () => {
@@ -140,7 +141,7 @@ export default function App() {
   // Re-fetch summary when any filter changes (for Evaluation view)
   useEffect(() => {
     fetchSummary();
-  }, [filters.datasets, filters.models, filters.languages, filters.turns, filters.evaluationTags, filters.metricSource]);
+  }, [filters.datasets, filters.models, filters.languages, filters.turns, filters.loss, filters.evaluationTags, filters.metricSource]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -249,6 +250,9 @@ export default function App() {
       if (filters.turns.length > 0) {
         params.append('turns', filters.turns.join(','));
       }
+      if (filters.loss.length > 0 && filters.loss.length < 2) {
+        params.append('loss', filters.loss.join(','));
+      }
 
       const url = `/api/rows?${params}`;
       const res = await fetch(url);
@@ -272,7 +276,7 @@ export default function App() {
     if (activeModule === 'evaluation') {
       return (
         <div className="flex-1 p-6 overflow-auto">
-          <EvaluationView summary={summary} availableModels={availableModels} isDark={isDark} />
+          <EvaluationView summary={summary} availableModels={availableModels} isDark={isDark} currentDataset={filters.datasets.length === 1 ? filters.datasets[0] : 'all'} />
         </div>
       );
     }
@@ -530,6 +534,7 @@ export default function App() {
             setLanguages,
             setDatasets,
             setTurns,
+            setLoss,
             setMetricSource,
             setScoreRange,
             setEvaluationTags,

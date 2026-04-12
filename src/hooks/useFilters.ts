@@ -12,6 +12,7 @@ const defaultFilters: FilterState = {
   searchQuery: '',
   datasets: [],
   turns: [], // ← 新增：默认不筛选任何 turn
+  loss: ['null'], // ← 新增：默认选中 null（loss = null）
 };
 
 export function useFilters(availableMetricSources: string[] = []) {
@@ -84,6 +85,10 @@ export function useFilters(availableMetricSources: string[] = []) {
     setFilters(prev => ({ ...prev, turns }));
   }, []);
 
+  const setLoss = useCallback((loss: ('null' | 'false')[]) => {
+    setFilters(prev => ({ ...prev, loss }));
+  }, []);
+
   const resetFilters = useCallback(() => {
     setFilters(defaultFilters);
   }, []);
@@ -92,6 +97,7 @@ export function useFilters(availableMetricSources: string[] = []) {
     filters.languages.length > 0 || 
     filters.datasets.length > 0 ||
     filters.turns.length > 0 ||
+    filters.loss.length !== 2 || // loss 筛选不是全选
     filters.metricSource !== DEFAULT_METRIC;
 
   const getMetricConfig = useCallback((source: string) => {
@@ -108,6 +114,7 @@ export function useFilters(availableMetricSources: string[] = []) {
     setSearchQuery,
     setDatasets,
     setTurns,
+    setLoss,
     resetFilters,
     hasActiveFilters,
     getMetricConfig,
