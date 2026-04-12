@@ -36,6 +36,7 @@ interface ModelTagStats {
   suffix: string;
   name: string;
   stats: TagStats;
+  passRate: number;
 }
 
 // Calculate tag statistics from tagResults array (now contains null for missing data)
@@ -55,6 +56,16 @@ function calculateTagStats(tagResults: (number | null)[]): TagStats {
   });
   
   return stats;
+}
+
+// Calculate pass rate based on manner settings
+function calculatePassRate(stats: TagStats, includeInvalid: boolean, includeNull: boolean): number {
+  let denominator = stats.pass + stats.error;
+  if (includeInvalid) denominator += stats.invalid;
+  if (includeNull) denominator += stats.null;
+  
+  if (denominator === 0) return 0;
+  return stats.pass / denominator;
 }
 
 // Get all models with tag statistics
@@ -88,16 +99,27 @@ export function EvaluationView({ summary, availableModels, isDark = false }: Eva
   const [compareModelA, setCompareModelA] = useState<string>('');
   const [compareModelB, setCompareModelB] = useState<string>('');
   const [activeTab, setActiveTab] = useState<'overview' | 'comparison' | 'analysis' | 'tags'>('overview');
+  
+  // Tag statistics manner: whether to include invalid and null in calculations
+  const [includeInvalid, setIncludeInvalid] = useState<boolean>(true);
+  const [includeNull, setIncludeNull] = useState<boolean>(true);
 
   const sortedModels = useMemo(() => {
     if (!summary?.models) return [];
     return [...summary.models].sort((a: any, b: any) => b.passRate - a.passRate);
   }, [summary]);
 
-  // Calculate tag statistics
+  // Calculate tag statistics with manner settings and sort by pass rate
   const modelsWithTagStats = useMemo(() => {
-    return getModelsWithTagStats(summary?.models || []);
-  }, [summary]);
+    const models = getModelsWithTagStats(summary?.models || []);
+    // Add passRate to each model and sort by it (descending)
+    return models
+      .map(model => ({
+        ...model,
+        passRate: calculatePassRate(model.stats, includeInvalid, includeNull)
+      }))
+      .sort((a, b) => b.passRate - a.passRate);
+  }, [summary, includeInvalid, includeNull]);
 
   const aggregateTagStats = useMemo(() => {
     return getAggregateTagStats(modelsWithTagStats);
@@ -215,12 +237,35 @@ export function EvaluationView({ summary, availableModels, isDark = false }: Eva
             <>
               {/* Aggregate Tag Statistics */}
               <div className={clsx("rounded-xl border p-4", themeClasses.bg, themeClasses.border)}>
-                <h3 className={clsx("font-semibold mb-4 flex items-center gap-2", themeClasses.text)}>
-                  <Tags className="w-5 h-5 text-indigo-500" />
-                  Overall Tag Distribution
-                </h3>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className={clsx("font-semibold flex items-center gap-2", themeClasses.text)}>
+                    <Tags className="w-5 h-5 text-indigo-500" />
+                    Overall Tag Distribution
+                  </h3>
+                  {/* Manner Selection */}
+                  <div className="flex items-center gap-4 text-sm">
+                    <label className={clsx("flex items-center gap-2 cursor-pointer", themeClasses.textSecondary)}>
+                      <input
+                        type="checkbox"
+                        checked={includeInvalid}
+                        onChange={(e) => setIncludeInvalid(e.target.checked)}
+                        className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                      />
+                      Include Invalid
+                    </label>
+                    <label className={clsx("flex items-center gap-2 cursor-pointer", themeClasses.textSecondary)}>
+                      <input
+                        type="checkbox"
+                        checked={includeNull}
+                        onChange={(e) => setIncludeNull(e.target.checked)}
+                        className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                      />
+                      Include Null
+                    </label>
+                  </div>
+                </div>
                 <div className="space-y-4">
-                  <TagDistributionBar stats={aggregateTagStats} isDark={isDark} showLegend />
+                  <TagDistributionBar stats={aggregateTagStats} isDark={isDark} showLegend includeInvalid={includeInvalid} includeNull={includeNull} />
                   <div className="grid grid-cols-4 gap-4 mt-4">
                     <TagStatCard 
                       label="Pass (1)" 
@@ -257,21 +302,42 @@ export function EvaluationView({ summary, availableModels, isDark = false }: Eva
               {/* Per-Model Tag Statistics */}
               <div className={clsx("rounded-xl border overflow-hidden", themeClasses.bg, themeClasses.border)}>
                 <div className={clsx("p-4 border-b", themeClasses.border)}>
-                  <h3 className={clsx("font-semibold flex items-center gap-2", themeClasses.text)}>
-                    <BarChart3 className="w-5 h-5 text-amber-500" />
-                    Tag Distribution by Model
-                  </h3>
+                  <div className="flex items-center justify-between">
+                    <h3 className={clsx("font-semibold flex items-center gap-2", themeClasses.text)}>
+                      <BarChart3 className="w-5 h-5 text-amber-500" />
+                      Tag Distribution by Model
+                    </h3>
+                    <span className={clsx("text-xs", themeClasses.textSecondary)}>
+                      Sorted by Pass Rate (descending)
+                    </span>
+                  </div>
                 </div>
                 <div className={clsx("divide-y", themeClasses.border)}>
-                  {modelsWithTagStats.map((model) => (
+                  {modelsWithTagStats.map((model, index) => (
                     <div key={model.suffix} className="p-4">
                       <div className="flex items-center justify-between mb-3">
-                        <p className={clsx("font-medium", themeClasses.text)}>{model.name}</p>
-                        <span className={clsx("text-sm", themeClasses.textSecondary)}>
-                          {model.stats.total} evaluations
-                        </span>
+                        <div className="flex items-center gap-3">
+                          <span className={clsx(
+                            "w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold",
+                            index === 0 ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400" :
+                            index === 1 ? "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400" :
+                            index === 2 ? "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400" :
+                            themeClasses.bgSecondary + " " + themeClasses.textSecondary
+                          )}>
+                            {index + 1}
+                          </span>
+                          <p className={clsx("font-medium", themeClasses.text)}>{model.name}</p>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <span className={clsx("text-sm font-semibold text-emerald-600 dark:text-emerald-400")}>
+                            Pass Rate: {(model.passRate * 100).toFixed(1)}%
+                          </span>
+                          <span className={clsx("text-sm", themeClasses.textSecondary)}>
+                            {model.stats.total} evals
+                          </span>
+                        </div>
                       </div>
-                      <TagDistributionBar stats={model.stats} isDark={isDark} compact />
+                      <TagDistributionBar stats={model.stats} isDark={isDark} compact includeInvalid={includeInvalid} includeNull={includeNull} />
                       <div className="grid grid-cols-4 gap-2 mt-3 text-xs">
                         <div className="text-emerald-600">
                           Pass: {model.stats.pass} ({((model.stats.pass / model.stats.total) * 100).toFixed(1)}%)
@@ -371,18 +437,27 @@ function TagDistributionBar({
   stats, 
   isDark, 
   showLegend = false,
-  compact = false
+  compact = false,
+  includeInvalid = true,
+  includeNull = true
 }: { 
   stats: TagStats; 
   isDark: boolean; 
   showLegend?: boolean;
   compact?: boolean;
+  includeInvalid?: boolean;
+  includeNull?: boolean;
 }) {
-  const total = stats.total || 1; // Avoid division by zero
-  const passPct = (stats.pass / total) * 100;
-  const errorPct = (stats.error / total) * 100;
-  const invalidPct = (stats.invalid / total) * 100;
-  const nullPct = (stats.null / total) * 100;
+  // Calculate total based on manner settings
+  let total = stats.pass + stats.error;
+  if (includeInvalid) total += stats.invalid;
+  if (includeNull) total += stats.null;
+  
+  const denominator = total || 1; // Avoid division by zero
+  const passPct = (stats.pass / denominator) * 100;
+  const errorPct = (stats.error / denominator) * 100;
+  const invalidPct = includeInvalid ? (stats.invalid / denominator) * 100 : 0;
+  const nullPct = includeNull ? (stats.null / denominator) * 100 : 0;
 
   const height = compact ? 'h-2' : 'h-4';
 
@@ -404,14 +479,14 @@ function TagDistributionBar({
             title={`Error: ${stats.error} (${errorPct.toFixed(1)}%)`}
           />
         )}
-        {invalidPct > 0 && (
+        {includeInvalid && invalidPct > 0 && (
           <div 
             className="bg-amber-500 h-full transition-all"
             style={{ width: `${invalidPct}%` }}
             title={`Invalid: ${stats.invalid} (${invalidPct.toFixed(1)}%)`}
           />
         )}
-        {nullPct > 0 && (
+        {includeNull && nullPct > 0 && (
           <div 
             className={clsx("h-full transition-all", isDark ? "bg-neutral-500" : "bg-neutral-400")}
             style={{ width: `${nullPct}%` }}
@@ -435,18 +510,22 @@ function TagDistributionBar({
               Error (-1): {stats.error}
             </span>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-amber-500" />
-            <span className={isDark ? "text-neutral-300" : "text-neutral-600"}>
-              Invalid (0): {stats.invalid}
-            </span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className={clsx("w-3 h-3 rounded-full", isDark ? "bg-neutral-500" : "bg-neutral-400")} />
-            <span className={isDark ? "text-neutral-300" : "text-neutral-600"}>
-              Null: {stats.null}
-            </span>
-          </div>
+          {includeInvalid && (
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-amber-500" />
+              <span className={isDark ? "text-neutral-300" : "text-neutral-600"}>
+                Invalid (0): {stats.invalid}
+              </span>
+            </div>
+          )}
+          {includeNull && (
+            <div className="flex items-center gap-2">
+              <div className={clsx("w-3 h-3 rounded-full", isDark ? "bg-neutral-500" : "bg-neutral-400")} />
+              <span className={isDark ? "text-neutral-300" : "text-neutral-600"}>
+                Null: {stats.null}
+              </span>
+            </div>
+          )}
         </div>
       )}
     </div>

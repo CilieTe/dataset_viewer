@@ -1098,6 +1098,192 @@ app.delete('/api/datasets/:name', (req, res) => {
   res.json({ success: true });
 });
 
+// Export filtered data to JSONL
+app.get('/api/export', (req, res) => {
+  const datasetFilter = (req.query.datasets as string) || 'all';
+  const modelsFilter = (req.query.models as string)?.split(',').filter(Boolean) || [];
+  const languagesFilter = (req.query.languages as string)?.split(',').filter(Boolean) || [];
+  const metricSource = (req.query.metricSource as string) || '';
+  const searchQuery = (req.query.search as string) || '';
+  const scoreMin = parseFloat(req.query.scoreMin as string) || 0;
+  const scoreMax = parseFloat(req.query.scoreMax as string) || 1;
+  const evaluationTagsParam = (req.query.evaluationTags as string) || '';
+  const evaluationTags = evaluationTagsParam ? evaluationTagsParam.split(',').map(Number).filter(n => !isNaN(n)) : [];
+  const turnsParam = (req.query.turns as string) || '';
+  const turnsFilter = turnsParam ? turnsParam.split(',').map(Number).filter(n => !isNaN(n)) : [];
+
+  // Get rows from selected datasets
+  const datasetNames = datasetFilter.split(',').filter(Boolean);
+  let rows: ParsedRow[] = [];
+  
+  if (datasetNames.length === 0) {
+    return res.status(400).json({ error: 'No datasets selected' });
+  }
+  
+  for (const name of datasetNames) {
+    if (datasets[name]) {
+      rows = rows.concat(datasets[name].rows);
+    }
+  }
+
+  // Apply model filter
+  if (modelsFilter.length > 0) {
+    rows = rows.filter(row => modelsFilter.some(suffix => row[`model_${suffix}`] !== undefined));
+  }
+
+  // Apply language filter
+  if (languagesFilter.length > 0) {
+    rows = rows.filter(row => languagesFilter.includes(row.language));
+  }
+
+  // Apply turn filter
+  if (turnsFilter.length > 0) {
+    rows = rows.filter(row => turnsFilter.includes(row.turn));
+  }
+
+  // Apply search filter
+  if (searchQuery) {
+    const query = searchQuery.toLowerCase();
+    rows = rows.filter(row => {
+      const conv = JSON.parse(row.full_conversation || '[]');
+      return conv.some((msg: any) => 
+        msg.content?.toLowerCase().includes(query)
+      );
+    });
+  }
+
+  // Filter by metricSource and scoreRange/evaluationTags
+  if (metricSource && rows.length > 0) {
+    let modelSuffixes: string[];
+    if (modelsFilter.length > 0) {
+      modelSuffixes = modelsFilter;
+    } else {
+      modelSuffixes = [];
+      Object.keys(rows[0]).forEach(key => {
+        if (key.startsWith('model_')) {
+          modelSuffixes.push(key.substring(6));
+        }
+      });
+    }
+    
+    rows = rows.filter(row => {
+      if (metricSource === 'tags') {
+        const anyModelMatches = modelSuffixes.some(suffix => {
+          const tagValue = row[`score_tags_${suffix}`];
+          if (evaluationTags.includes(-999) && (tagValue === undefined || tagValue === null)) {
+            return true;
+          }
+          if (tagValue !== undefined && tagValue !== null) {
+            return evaluationTags.includes(Number(tagValue));
+          }
+          return false;
+        });
+        return anyModelMatches;
+      } else {
+        const anyModelMatches = modelSuffixes.some(suffix => {
+          const score = row[`score_${metricSource}_${suffix}`];
+          if (score === undefined || score === null) return false;
+          return score >= scoreMin && score <= scoreMax;
+        });
+        return anyModelMatches;
+      }
+    });
+  }
+
+  // Convert rows back to original format
+  const outputLines: string[] = [];
+  
+  // Group rows by session_id to reconstruct original items
+  const sessionGroups: Record<string, ParsedRow[]> = {};
+  rows.forEach(row => {
+    if (!sessionGroups[row.session_id]) {
+      sessionGroups[row.session_id] = [];
+    }
+    sessionGroups[row.session_id].push(row);
+  });
+
+  // Reconstruct each session
+  for (const sessionId in sessionGroups) {
+    const sessionRows = sessionGroups[sessionId].sort((a, b) => a.turn - b.turn);
+    
+    // Get the first row to extract metadata
+    const firstRow = sessionRows[0];
+    const convMetadata = JSON.parse(firstRow.conv_metadata || '{}');
+    
+    // Reconstruct dialog array
+    const dialog = sessionRows.map(row => {
+      const metadata = JSON.parse(row.conv_metadata || '{}');
+      const turnData: any = {
+        turn_index: row.turn,
+        role: 'assistant',
+        content: row.ground_truth
+      };
+      
+      // Add tags if present
+      if (metadata.tags) {
+        turnData.tags = metadata.tags;
+      }
+      
+      // Add laep data if present
+      if (row.node_remark) {
+        turnData.laep = { remark: row.node_remark };
+      }
+      
+      // Add evaluate data (model outputs)
+      const evaluate: Record<string, any> = {};
+      Object.keys(row).forEach(key => {
+        if (key.startsWith('model_')) {
+          const suffix = key.substring(6);
+          evaluate[suffix] = {
+            content: row[key]
+          };
+          
+          // Add metrics if present
+          const metrics: Record<string, any> = {};
+          Object.keys(row).forEach(scoreKey => {
+            if (scoreKey.startsWith(`score_`) && scoreKey.endsWith(`_${suffix}`)) {
+              const sourceName = scoreKey.substring(6, scoreKey.length - suffix.length - 1);
+              const score = row[scoreKey];
+              if (score !== undefined && score !== null) {
+                metrics[sourceName] = { score };
+              }
+            }
+          });
+          
+          if (Object.keys(metrics).length > 0) {
+            evaluate[suffix].metrics = metrics;
+          }
+        }
+      });
+      
+      if (Object.keys(evaluate).length > 0) {
+        turnData.evaluate = evaluate;
+      }
+      
+      return turnData;
+    });
+    
+    // Construct the output item
+    const outputItem = {
+      id: sessionId,
+      type: convMetadata.type || 'unknown',
+      meta: {
+        chat_lang: firstRow.language
+      },
+      dialog: dialog
+    };
+    
+    outputLines.push(JSON.stringify(outputItem));
+  }
+
+  // Set response headers for file download
+  res.setHeader('Content-Type', 'application/jsonl');
+  res.setHeader('Content-Disposition', `attachment; filename="filtered_export_${new Date().toISOString().slice(0, 10)}.jsonl"`);
+  
+  // Send the data
+  res.send(outputLines.join('\n'));
+});
+
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on http://localhost:${PORT}`);
   console.log(`Loaded ${Object.keys(datasets).length} datasets`);

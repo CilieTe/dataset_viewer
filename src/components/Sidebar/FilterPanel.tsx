@@ -265,9 +265,23 @@ export function FilterPanel({
       {/* Turn Filter */}
       {availableTurns.length > 0 && (
         <div className="space-y-2">
-          <label className="text-xs font-medium text-neutral-500 uppercase tracking-wider">
-            Turn
-          </label>
+          <div className="flex items-center justify-between">
+            <label className="text-xs font-medium text-neutral-500 uppercase tracking-wider">
+              Turn
+            </label>
+            <button
+              onClick={() => {
+                if (selectedTurns.length === availableTurns.length) {
+                  onTurnsChange([]);
+                } else {
+                  onTurnsChange([...availableTurns]);
+                }
+              }}
+              className="text-xs text-indigo-600 hover:text-indigo-700 font-medium"
+            >
+              {selectedTurns.length === availableTurns.length ? 'Clear All' : 'Select All'}
+            </button>
+          </div>
           <div className="flex flex-wrap gap-1.5">
             {availableTurns.map((turn) => (
               <button

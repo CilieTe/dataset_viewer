@@ -6,7 +6,8 @@ import {
   Check, 
   FileJson,
   Trash2,
-  RefreshCw
+  RefreshCw,
+  Download
 } from 'lucide-react';
 
 interface DatasetInfo {
@@ -19,16 +20,27 @@ interface DatasetPanelProps {
   selectedDatasets: string[];
   onDatasetsChange: (datasets: string[]) => void;
   isDark?: boolean;
+  filters?: {
+    models: string[];
+    languages: string[];
+    metricSource: string;
+    scoreRange: [number, number];
+    evaluationTags: number[];
+    searchQuery: string;
+    turns: number[];
+  };
 }
 
 export function DatasetPanel({
   selectedDatasets,
   onDatasetsChange,
   isDark = false,
+  filters,
 }: DatasetPanelProps) {
   const [datasets, setDatasets] = useState<DatasetInfo[]>([]);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [dragOver, setDragOver] = useState(false);
 
   const fetchDatasets = async () => {
@@ -128,6 +140,50 @@ export function DatasetPanel({
     onDatasetsChange([]);
   };
 
+  const handleExport = async () => {
+    if (selectedDatasets.length === 0) {
+      alert('Please select at least one dataset to export');
+      return;
+    }
+
+    setExporting(true);
+    try {
+      const params = new URLSearchParams();
+      params.set('datasets', selectedDatasets.join(','));
+      
+      if (filters) {
+        if (filters.models.length > 0) params.set('models', filters.models.join(','));
+        if (filters.languages.length > 0) params.set('languages', filters.languages.join(','));
+        if (filters.turns.length > 0) params.set('turns', filters.turns.join(','));
+        if (filters.metricSource) params.set('metricSource', filters.metricSource);
+        if (filters.searchQuery) params.set('search', filters.searchQuery);
+        if (filters.evaluationTags.length > 0) params.set('evaluationTags', filters.evaluationTags.join(','));
+        params.set('scoreMin', filters.scoreRange[0].toString());
+        params.set('scoreMax', filters.scoreRange[1].toString());
+      }
+
+      const response = await fetch(`/api/export?${params.toString()}`);
+      if (!response.ok) {
+        throw new Error('Export failed');
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `filtered_export_${new Date().toISOString().slice(0, 10)}.jsonl`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (error) {
+      console.error('Export failed:', error);
+      alert('Export failed. Please try again.');
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const themeClasses = {
     text: isDark ? 'text-neutral-100' : 'text-neutral-900',
     textSecondary: isDark ? 'text-neutral-400' : 'text-neutral-500',
@@ -210,6 +266,23 @@ export function DatasetPanel({
             </button>
           </div>
         </div>
+      )}
+
+      {/* Export Button */}
+      {selectedDatasets.length > 0 && (
+        <button
+          onClick={handleExport}
+          disabled={exporting}
+          className={clsx(
+            "w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
+            isDark
+              ? "bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/30 border border-emerald-600/30"
+              : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200"
+          )}
+        >
+          <Download className={clsx("w-4 h-4", exporting && "animate-bounce")} />
+          {exporting ? 'Exporting...' : 'Export Filtered JSONL'}
+        </button>
       )}
 
       {/* Dataset List */}

@@ -471,7 +471,7 @@ export default function App() {
 
           {/* Documentation */}
           <a
-            href="https://github.com/openclaw/openclaw"
+            href="https://github.com/CilieTe/dataset_viewer?tab=readme-ov-file#local-preference-dataset-viewer"
             target="_blank"
             rel="noopener noreferrer"
             className={clsx(
@@ -487,7 +487,7 @@ export default function App() {
 
           {/* GitHub */}
           <a
-            href="https://github.com/openclaw/openclaw"
+            href="https://github.com/CilieTe/dataset_viewer"
             target="_blank"
             rel="noopener noreferrer"
             className={clsx(

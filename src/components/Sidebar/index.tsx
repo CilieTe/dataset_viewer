@@ -76,6 +76,15 @@ export function Sidebar({
             selectedDatasets={filters.datasets}
             onDatasetsChange={onFiltersChange.setDatasets}
             isDark={isDark}
+            filters={{
+              models: filters.models,
+              languages: filters.languages,
+              metricSource: filters.metricSource,
+              scoreRange: filters.scoreRange,
+              evaluationTags: filters.evaluationTags,
+              searchQuery: appliedSearchQuery || filters.searchQuery,
+              turns: filters.turns,
+            }}
           />
         );
       case 'filters':
